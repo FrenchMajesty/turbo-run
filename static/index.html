@@ -56,6 +56,35 @@
             color: white;
         }
 
+        .start-button {
+            padding: 12px 30px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #667eea;
+            color: white;
+            transition: all 0.3s ease;
+            margin-left: 20px;
+        }
+
+        .start-button:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .start-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .start-button.processing {
+            background: #f59e0b;
+        }
+
         .stats-dashboard {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -251,6 +280,7 @@
         <header>
             <h1>🚀 TurboRun Real-Time Visualization</h1>
             <span class="connection-status disconnected" id="connectionStatus">Disconnected</span>
+            <button class="start-button" id="startButton" disabled>Start Processing</button>
         </header>
 
         <div class="stats-dashboard" id="statsDashboard">
@@ -303,16 +333,31 @@
             transports: ['websocket']
         });
 
+        const startButton = document.getElementById('startButton');
+
         socket.on('connect', () => {
             console.log('Connected to TurboRun server');
             document.getElementById('connectionStatus').textContent = 'Connected';
             document.getElementById('connectionStatus').className = 'connection-status connected';
+
+            // Enable start button when connected
+            startButton.disabled = false;
         });
 
         socket.on('disconnect', () => {
             console.log('Disconnected from server');
             document.getElementById('connectionStatus').textContent = 'Disconnected';
             document.getElementById('connectionStatus').className = 'connection-status disconnected';
+
+            // Disable start button when disconnected
+            startButton.disabled = true;
+        });
+
+        socket.on('processing_started', () => {
+            console.log('Processing started');
+            startButton.textContent = 'Processing...';
+            startButton.className = 'start-button processing';
+            startButton.disabled = true;
         });
 
         socket.on('initial_stats', (data) => {
@@ -441,6 +486,14 @@
             document.getElementById('launched').textContent = stats.LaunchedCount || 0;
             document.getElementById('failed').textContent = stats.FailedCount || 0;
         }
+
+        // Start button click handler
+        startButton.addEventListener('click', () => {
+            console.log('Start button clicked, emitting start_processing event');
+            socket.emit('start_processing');
+            startButton.disabled = true;
+            startButton.textContent = 'Starting...';
+        });
     </script>
 </body>
 </html>

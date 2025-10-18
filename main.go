@@ -69,8 +69,8 @@ func main() {
 	// Override budgets for demo (allow unlimited requests)
 	turboRun.OverrideBudgetsForTests(1000000, 1000000, 10000, 10000)
 
-	// Initialize WebSocket server
-	wsServer := server.NewWebSocketServer(turboRun)
+	// Initialize WebSocket server with workload generator
+	wsServer := server.NewWebSocketServer(turboRun, generateDemoWorkload)
 	wsServer.Start()
 
 	// Setup HTTP server
@@ -81,16 +81,11 @@ func main() {
 	go func() {
 		fmt.Println("📡 WebSocket server running on http://localhost:8080")
 		fmt.Println("🎨 Open http://localhost:8080 in your browser to see the visualization")
+		fmt.Println("⏸️  Processing will start when you click 'Start Processing' in the UI")
 		if err := http.ListenAndServe(":8080", nil); err != nil {
 			log.Fatalf("HTTP server error: %v", err)
 		}
 	}()
-
-	// Wait a moment for server to start
-	time.Sleep(500 * time.Millisecond)
-
-	// Generate and process fake WorkNodes
-	generateDemoWorkload(turboRun)
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)

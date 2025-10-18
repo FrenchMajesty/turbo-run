@@ -11,17 +11,21 @@ import (
 )
 
 type WebSocketServer struct {
-	io       *socketio.Io
-	turboRun *turbo_run.TurboRun
+	io                *socketio.Io
+	turboRun          *turbo_run.TurboRun
+	workloadGenerator func(*turbo_run.TurboRun)
+	isProcessing      bool
 }
 
 // NewWebSocketServer creates a new WebSocket server for broadcasting TurboRun events
-func NewWebSocketServer(tr *turbo_run.TurboRun) *WebSocketServer {
+func NewWebSocketServer(tr *turbo_run.TurboRun, workloadGen func(*turbo_run.TurboRun)) *WebSocketServer {
 	io := socketio.New()
 
 	ws := &WebSocketServer{
-		io:       io,
-		turboRun: tr,
+		io:                io,
+		turboRun:          tr,
+		workloadGenerator: workloadGen,
+		isProcessing:      false,
 	}
 
 	// Setup connection handler
@@ -33,6 +37,12 @@ func NewWebSocketServer(tr *turbo_run.TurboRun) *WebSocketServer {
 		statsJSON, _ := json.Marshal(stats)
 		socket.Emit("initial_stats", string(statsJSON))
 
+		// Handle start_processing event from client
+		socket.On("start_processing", func(event *socketio.EventPayload) {
+			log.Println("Received start_processing request from client")
+			ws.StartProcessing()
+		})
+
 		// Handle disconnect
 		socket.On("disconnect", func(event *socketio.EventPayload) {
 			log.Printf("Client disconnected: %s", socket.Id)
@@ -40,6 +50,27 @@ func NewWebSocketServer(tr *turbo_run.TurboRun) *WebSocketServer {
 	})
 
 	return ws
+}
+
+// StartProcessing triggers the workload generation if not already processing
+func (ws *WebSocketServer) StartProcessing() {
+	if ws.isProcessing {
+		log.Println("Already processing, ignoring start request")
+		return
+	}
+
+	ws.isProcessing = true
+	log.Println("Starting workload processing...")
+
+	// Notify clients that processing has started
+	ws.io.Emit("processing_started", "")
+
+	// Run workload generation in goroutine
+	go func() {
+		if ws.workloadGenerator != nil {
+			ws.workloadGenerator(ws.turboRun)
+		}
+	}()
 }
 
 // Start begins broadcasting TurboRun events to all connected clients

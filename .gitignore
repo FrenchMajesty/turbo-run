@@ -27,6 +27,8 @@ go.work.sum
 # env file
 .env
 .claude/
+turbo-run
+turbo_run.log
 
 # Editor/IDE
 # .idea/
