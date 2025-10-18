@@ -56,7 +56,7 @@ type ConsumptionTrackerStats struct {
 func NewConsumptionTracker(backend rate_limit.Backend) *consumptionTracker {
 	// Use in-memory backend as fallback if none provided
 	if backend == nil {
-		backend = memory.NewMemory()
+		backend = memory.NewBackend()
 	}
 
 	return &consumptionTracker{

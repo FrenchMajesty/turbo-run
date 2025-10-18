@@ -23,8 +23,8 @@ type Memory struct {
 	mu            sync.RWMutex
 }
 
-// NewMemory creates a new in-memory rate limit backend with default budgets
-func NewMemory() *Memory {
+// NewBackend creates a new in-memory rate limit backend with default budgets
+func NewBackend() *Memory {
 	return &Memory{
 		state:         make(map[groq.Provider]usageData),
 		currentMinute: time.Now().Truncate(time.Minute),

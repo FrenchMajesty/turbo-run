@@ -24,7 +24,7 @@ type Client struct {
 }
 
 // NewClient creates a new UDS rate limiter client
-func NewClient() *Client {
+func NewBackend() *Client {
 	budgets := map[groq.Provider]rate_limit.RateLimit{
 		groq.ProviderGroq:   rate_limit.GroqRateLimit,
 		groq.ProviderOpenAI: rate_limit.OpenAIRateLimit,
