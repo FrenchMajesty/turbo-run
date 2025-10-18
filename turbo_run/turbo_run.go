@@ -16,6 +16,26 @@ import (
 	openai "github.com/openai/openai-go/v2"
 )
 
+type EventType string
+
+const (
+	EventNodeCreated     EventType = "node_created"
+	EventNodeReady       EventType = "node_ready"
+	EventNodePrioritized EventType = "node_prioritized"
+	EventNodeDispatched  EventType = "node_dispatched"
+	EventNodeRunning     EventType = "node_running"
+	EventNodeRetrying    EventType = "node_retrying"
+	EventNodeCompleted   EventType = "node_completed"
+	EventNodeFailed      EventType = "node_failed"
+)
+
+type Event struct {
+	Type      EventType              `json:"type"`
+	NodeID    string                 `json:"node_id"`
+	Timestamp time.Time              `json:"timestamp"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
 type TurboRun struct {
 	// Core components
 	graph         *Graph
@@ -26,6 +46,7 @@ type TurboRun struct {
 	// Channels
 	quit      chan struct{}
 	launchpad chan any
+	eventChan chan *Event
 
 	// Misc
 	mu         sync.RWMutex // protects launchedCount and stats reading
@@ -71,6 +92,7 @@ func NewTurboRun(
 			quit:          make(chan struct{}),
 			workersPool:   NewWorkerPool(120, &groq, openai),
 			launchpad:     make(chan any, 100),
+			eventChan:     make(chan *Event, 1000),
 			fileLogger:    fileLogger,
 			logFile:       logFile,
 			startTime:     time.Now(),
@@ -91,13 +113,13 @@ func NewTurboRun(
 	return instance
 }
 
-// GetTurboRun returns the singleton instance of the turbo run (or panics if it is nil)
-func GetTurboRun() *TurboRun {
+// GetTurboRun returns the singleton instance of the turbo run
+func GetTurboRun() (*TurboRun, error) {
 	if instance == nil {
-		panic("turbo run instance is nil")
+		return nil, fmt.Errorf("turbo run instance is nil")
 	}
 
-	return instance
+	return instance, nil
 }
 
 // Start starts the turbo runner
@@ -126,18 +148,82 @@ func (tr *TurboRun) Stop() {
 	if tr.logFile != nil {
 		tr.logFile.Close()
 	}
+
+	if tr.eventChan != nil {
+		close(tr.eventChan)
+	}
+}
+
+// GetEventChan returns the event channel for external listeners
+func (tr *TurboRun) GetEventChan() <-chan *Event {
+	return tr.eventChan
+}
+
+// emitEvent sends an event to the event channel (non-blocking)
+func (tr *TurboRun) emitEvent(eventType EventType, nodeID uuid.UUID, data map[string]interface{}) {
+	if tr.eventChan == nil {
+		return
+	}
+
+	event := &Event{
+		Type:      eventType,
+		NodeID:    nodeID.String(),
+		Timestamp: time.Now(),
+		Data:      data,
+	}
+
+	select {
+	case tr.eventChan <- event:
+		// Event sent successfully
+	default:
+		// Channel full, drop event to avoid blocking
+	}
 }
 
 // Push adds a work node to the graph with no dependencies
 func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 	tr.graph.Add(workNode, []uuid.UUID{})
+
+	// Emit node created event
+	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]interface{}{
+		"dependencies":     []string{},
+		"estimated_tokens": workNode.GetEstimatedTokens(),
+		"provider":         tr.providerToString(workNode.GetProvider()),
+	})
+
 	return tr
 }
 
 // PushWithDependencies adds a work node to the graph with dependencies
 func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid.UUID) *TurboRun {
 	tr.graph.Add(workNode, dependencies)
+
+	// Convert dependencies to strings for JSON
+	depStrings := make([]string, len(dependencies))
+	for i, dep := range dependencies {
+		depStrings[i] = dep.String()
+	}
+
+	// Emit node created event
+	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]interface{}{
+		"dependencies":     depStrings,
+		"estimated_tokens": workNode.GetEstimatedTokens(),
+		"provider":         tr.providerToString(workNode.GetProvider()),
+	})
+
 	return tr
+}
+
+// providerToString converts Provider to string
+func (tr *TurboRun) providerToString(p Provider) string {
+	switch p {
+	case ProviderGroq:
+		return "groq"
+	case ProviderOpenAI:
+		return "openai"
+	default:
+		return "unknown"
+	}
 }
 
 // WaitFor waits for the result of a work node
@@ -175,9 +261,20 @@ func (tr *TurboRun) listenForReadyNodes() {
 			return // Shutdown signal
 
 		case node := <-tr.graph.readyNodesChan:
+			// Emit node ready event
+			tr.emitEvent(EventNodeReady, node.ID, map[string]interface{}{
+				"estimated_tokens": node.GetEstimatedTokens(),
+			})
+
 			tr.priorityQueue.Push(&priority_queue.QueueItem[*WorkNode]{
 				Item:     node,
 				Priority: node.GetEstimatedTokens(),
+			})
+
+			// Emit node prioritized event
+			tr.emitEvent(EventNodePrioritized, node.ID, map[string]interface{}{
+				"priority":   node.GetEstimatedTokens(),
+				"queue_size": tr.priorityQueue.Size(),
 			})
 
 			// Wait for the PQ to get re-organized
@@ -214,6 +311,13 @@ func (tr *TurboRun) listenForLaunchPad() {
 			}
 
 			tr.tracker.RecordConsumption(node.GetProvider(), node.GetEstimatedTokens())
+
+			// Emit node dispatched event
+			tr.emitEvent(EventNodeDispatched, node.ID, map[string]interface{}{
+				"worker_pool_busy": tr.workersPool.GetBusyWorkers(),
+				"worker_pool_size": tr.workersPool.GetWorkerCount(),
+			})
+
 			tr.workersPool.Dispatch(node)
 			tr.removeNodeFromGraphOnCompletion(node)
 
@@ -227,12 +331,23 @@ func (tr *TurboRun) listenForLaunchPad() {
 // removeNodeFromGraphOnCompletion removes a node from the graph after it has completed
 func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 	node.AddResultCallback(func(result RunResult) {
-		tr.graph.Remove(node.ID)
+		// Emit completion or failure event
 		if result.Error != nil {
+			tr.emitEvent(EventNodeFailed, node.ID, map[string]interface{}{
+				"error":    result.Error.Error(),
+				"duration": result.Duration.String(),
+			})
 			tr.mu.Lock()
 			tr.failedCount++
 			tr.mu.Unlock()
+		} else {
+			tr.emitEvent(EventNodeCompleted, node.ID, map[string]interface{}{
+				"duration":    result.Duration.String(),
+				"tokens_used": result.TokensUsed,
+			})
 		}
+
+		tr.graph.Remove(node.ID)
 	})
 }
 

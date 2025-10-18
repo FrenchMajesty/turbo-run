@@ -237,6 +237,18 @@ func (w *WorkNode) wrapWithRetry(workFn func(w *WorkNode, groq *groq.GroqClientI
 			// Add delay before retry (but not on first attempt)
 			if attempt > 0 {
 				delay := w.calculateDelay(attempt - 1)
+
+				// Emit retry event
+				turboRun := GetTurboRun()
+				if turboRun != nil {
+					turboRun.emitEvent(EventNodeRetrying, w.ID, map[string]interface{}{
+						"attempt":     attempt + 1,
+						"max_retries": w.retryConfig.MaxRetries + 1,
+						"delay":       delay.String(),
+						"error":       lastResult.Error.Error(),
+					})
+				}
+
 				if w.verboseLog {
 					fmt.Printf("WorkNode retry attempt %d/%d after %v delay for node %s",
 						attempt+1, w.retryConfig.MaxRetries+1, delay, w.ID)
@@ -344,6 +356,14 @@ func executeStandardGroqRequest(w *WorkNode, groq *groq.GroqClientInterface, ope
 	}
 
 	w.SetStatus(WorkNodeStatusRunning)
+
+	// Emit running event
+	turboRun := GetTurboRun()
+	if turboRun != nil {
+		turboRun.emitEvent(EventNodeRunning, w.ID, map[string]interface{}{
+			"provider": "groq",
+		})
+	}
 
 	response, err := (*groq).ChatCompletion(context.Background(), w.GetGroqReq())
 	if err != nil {
