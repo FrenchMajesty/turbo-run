@@ -3,6 +3,9 @@ package turbo_run
 import (
 	"sync"
 	"time"
+
+	"github.com/FrenchMajesty/turbo-run/rate_limit"
+	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/memory"
 )
 
 type usageData struct {
@@ -29,8 +32,8 @@ type consumptionTracker struct {
 	groqBudgetRequests   int
 	openaiBudgetRequests int
 
-	// Shared rate limiter for cross-process coordination
-	sharedLimiter *SharedRateLimiter
+	// Backend for rate limit persistence (supports UDS, Redis, in-memory, etc.)
+	backend rate_limit.Backend
 }
 
 type ConsumptionTrackerStats struct {
@@ -49,17 +52,22 @@ type ConsumptionTrackerStats struct {
 	IsBlocked      bool
 }
 
-func NewConsumptionTracker() *consumptionTracker {
+func NewConsumptionTracker(backend rate_limit.Backend) *consumptionTracker {
+	// Use in-memory backend as fallback if none provided
+	if backend == nil {
+		backend = memory.NewMemory()
+	}
+
 	return &consumptionTracker{
 		current:              make(map[Provider]usageData),
 		total:                make(map[Provider]usageData),
 		history:              make(map[string]map[Provider]usageData),
 		currentMinute:        time.Now().Truncate(time.Minute),
-		groqBudgetTokens:     GroqRateLimit.TPM,
-		openaiBudgetTokens:   OpenAIRateLimit.TPM,
-		groqBudgetRequests:   GroqRateLimit.RPM,
-		openaiBudgetRequests: OpenAIRateLimit.RPM,
-		sharedLimiter:        NewSharedRateLimiter(),
+		groqBudgetTokens:     int(rate_limit.GroqRateLimit.TPM),
+		openaiBudgetTokens:   int(rate_limit.OpenAIRateLimit.TPM),
+		groqBudgetRequests:   rate_limit.GroqRateLimit.RPM,
+		openaiBudgetRequests: rate_limit.OpenAIRateLimit.RPM,
+		backend:              backend,
 	}
 }
 
@@ -69,7 +77,7 @@ func (ct *consumptionTracker) Cycle() {
 	defer ct.mu.Unlock()
 
 	newMinute := time.Now().Truncate(time.Minute)
-	
+
 	// Only cycle if we're actually in a new minute to avoid double-cycling
 	if ct.currentMinute.Equal(newMinute) {
 		return
@@ -95,6 +103,10 @@ func (ct *consumptionTracker) SetBudgetsForTests(groqBudgetTokens int, openaiBud
 	ct.openaiBudgetTokens = openaiBudgetTokens
 	ct.groqBudgetRequests = groqBudgetRequests
 	ct.openaiBudgetRequests = openaiBudgetRequests
+
+	// Also update backend budgets for cross-process coordination
+	ct.backend.SetBudgetForTests(convertProvider(ProviderGroq), groqBudgetTokens, groqBudgetRequests)
+	ct.backend.SetBudgetForTests(convertProvider(ProviderOpenAI), openaiBudgetTokens, openaiBudgetRequests)
 }
 
 // RecordConsumption records the consumption for the current minute
@@ -111,22 +123,22 @@ func (ct *consumptionTracker) RecordConsumption(provider Provider, tokens int) {
 	totalData.Requests += 1
 	ct.total[provider] = totalData
 
-	// Also record in shared rate limiter for cross-process coordination
+	// Also record in backend for cross-process coordination
 	// Don't fail if this doesn't work - local tracking is still functional
-	ct.sharedLimiter.RecordConsumption(provider, tokens)
+	ct.backend.RecordConsumption(convertProvider(provider), tokens, 1)
 }
 
 // TimeUntilReset returns the time until the current minute resets
 func (ct *consumptionTracker) TimeUntilReset() time.Duration {
-	// Use shared limiter for consistent timing across processes
-	return ct.sharedLimiter.TimeUntilReset()
+	// Use backend for consistent timing across processes
+	return ct.backend.TimeUntilReset()
 }
 
 // BudgetAvailableForCycle returns the budget available for the current cycle for the given provider
 func (ct *consumptionTracker) BudgetAvailableForCycle(provider Provider) (int, int) {
-	// Use shared rate limiter for cross-process coordination
-	sharedTokens, sharedRequests := ct.sharedLimiter.BudgetAvailableForCycle(provider)
-	
+	// Use backend for cross-process coordination
+	sharedTokens, sharedRequests := ct.backend.BudgetAvailable(convertProvider(provider))
+
 	// Check and sync local state if needed
 	ct.mu.Lock()
 	currentMinute := time.Now().Truncate(time.Minute)
@@ -136,10 +148,10 @@ func (ct *consumptionTracker) BudgetAvailableForCycle(provider Provider) (int, i
 		ct.resetUsageData(ProviderGroq)
 		ct.resetUsageData(ProviderOpenAI)
 	}
-	
+
 	localTokens := ct.getAvailableTokens(provider)
 	localRequests := ct.getAvailableRequests(provider)
-	
+
 	// Check if we're in a minute transition period (within 2 seconds of minute boundary)
 	now := time.Now()
 	secondsIntoMinute := float64(now.Second()) + float64(now.Nanosecond())/1000000000.0
@@ -162,7 +174,7 @@ func (ct *consumptionTracker) BudgetAvailableForCycle(provider Provider) (int, i
 				tokens = localTokens
 			}
 		}
-		
+
 		if sharedRequests == 0 && localRequests > 0 {
 			requests = localRequests
 		} else if localRequests == 0 && sharedRequests > 0 {
@@ -285,4 +297,16 @@ func (ct *consumptionTracker) increaseRequests(provider Provider, requests int) 
 	currentData := ct.current[provider]
 	currentData.Requests += requests
 	ct.current[provider] = currentData
+}
+
+// convertProvider converts turbo_run.Provider to ratelimit.Provider
+func convertProvider(p Provider) rate_limit.Provider {
+	switch p {
+	case ProviderGroq:
+		return rate_limit.ProviderGroq
+	case ProviderOpenAI:
+		return rate_limit.ProviderOpenAI
+	default:
+		return rate_limit.ProviderGroq
+	}
 }

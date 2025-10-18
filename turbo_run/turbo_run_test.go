@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
+	"github.com/FrenchMajesty/turbo-run/ratelimit"
 	openai "github.com/openai/openai-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -766,10 +767,10 @@ func TestTurboRun_BudgetExhaustionBlocking(t *testing.T) {
 	mockOpenAI := &openai.Client{}
 
 	// Store original limits to restore after test
-	originalGroqTokens := GroqRateLimit.TPM
-	originalGroqRequests := GroqRateLimit.RPM
-	originalOpenAITokens := OpenAIRateLimit.TPM
-	originalOpenAIRequests := OpenAIRateLimit.RPM
+	originalGroqTokens := int(ratelimit.GroqRateLimit.TPM)
+	originalGroqRequests := ratelimit.GroqRateLimit.RPM
+	originalOpenAITokens := int(ratelimit.OpenAIRateLimit.TPM)
+	originalOpenAIRequests := ratelimit.OpenAIRateLimit.RPM
 
 	// Mock responses
 	mockGroq.On("ChatCompletion", mock.Anything, mock.Anything).Return(

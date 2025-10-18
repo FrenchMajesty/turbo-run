@@ -30,6 +30,10 @@ go.work.sum
 turbo-run
 turbo_run.log
 
+# Unix Domain Socket files
+*.sock
+/tmp/turbo-run-rate-limiter.sock
+
 # Editor/IDE
 # .idea/
 # .vscode/

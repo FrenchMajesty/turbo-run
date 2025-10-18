@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
+	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/uds"
+	"github.com/FrenchMajesty/turbo-run/ratelimit"
 	"github.com/FrenchMajesty/turbo-run/utils/priority_queue"
 	"github.com/google/uuid"
 	openai "github.com/openai/openai-go/v2"
@@ -78,17 +80,32 @@ func NewTurboRun(
 	groq groq.GroqClientInterface,
 	openai *openai.Client,
 ) *TurboRun {
+	return NewTurboRunWithBackend(groq, openai, nil)
+}
+
+// NewTurboRunWithBackend creates a new TurboRun instance with a custom rate limit backend.
+// If backend is nil, defaults to UDS backend for cross-process coordination.
+func NewTurboRunWithBackend(
+	groq groq.GroqClientInterface,
+	openai *openai.Client,
+	backend ratelimit.Backend,
+) *TurboRun {
 	once.Do(func() {
 		// Setup file logger
 		env := os.Getenv("ENV")
 		uniqueID := uuid.New().String()[:6]
 		fileLogger, logFile := prepareFileLogger(env, uniqueID)
 
+		// Default to UDS backend for cross-process coordination if none provided
+		if backend == nil {
+			backend = uds.NewClient()
+		}
+
 		instance = &TurboRun{
 			uniqueID:      uniqueID,
 			graph:         NewGraph(),
 			priorityQueue: priority_queue.NewMaxPriorityQueue[*WorkNode](),
-			tracker:       NewConsumptionTracker(),
+			tracker:       NewConsumptionTracker(backend),
 			quit:          make(chan struct{}),
 			workersPool:   NewWorkerPool(120, &groq, openai),
 			launchpad:     make(chan any, 100),
