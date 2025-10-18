@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/FrenchMajesty/turbo-run/clients/groq"
 	"github.com/FrenchMajesty/turbo-run/rate_limit"
 )
 
@@ -16,26 +17,26 @@ type usageData struct {
 // Memory is an in-memory rate limit backend for single-process scenarios.
 // It tracks rate limits locally without any inter-process communication.
 type Memory struct {
-	state         map[rate_limit.Provider]usageData
+	state         map[groq.Provider]usageData
 	currentMinute time.Time
-	budgets       map[rate_limit.Provider]rate_limit.RateLimit
+	budgets       map[groq.Provider]rate_limit.RateLimit
 	mu            sync.RWMutex
 }
 
 // NewMemory creates a new in-memory rate limit backend with default budgets
 func NewMemory() *Memory {
 	return &Memory{
-		state:         make(map[rate_limit.Provider]usageData),
+		state:         make(map[groq.Provider]usageData),
 		currentMinute: time.Now().Truncate(time.Minute),
-		budgets: map[rate_limit.Provider]rate_limit.RateLimit{
-			rate_limit.ProviderGroq:   rate_limit.GroqRateLimit,
-			rate_limit.ProviderOpenAI: rate_limit.OpenAIRateLimit,
+		budgets: map[groq.Provider]rate_limit.RateLimit{
+			groq.ProviderGroq:   rate_limit.GroqRateLimit,
+			groq.ProviderOpenAI: rate_limit.OpenAIRateLimit,
 		},
 	}
 }
 
 // BudgetAvailable returns the available token and request budget for the given provider
-func (m *Memory) BudgetAvailable(provider rate_limit.Provider) (tokensAvailable int, requestsAvailable int) {
+func (m *Memory) BudgetAvailable(provider groq.Provider) (tokensAvailable int, requestsAvailable int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -58,7 +59,7 @@ func (m *Memory) BudgetAvailable(provider rate_limit.Provider) (tokensAvailable 
 }
 
 // RecordConsumption records token and request usage for the given provider
-func (m *Memory) RecordConsumption(provider rate_limit.Provider, tokens int, requests int) error {
+func (m *Memory) RecordConsumption(provider groq.Provider, tokens int, requests int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -80,7 +81,7 @@ func (m *Memory) TimeUntilReset() time.Duration {
 }
 
 // SetBudgetForTests sets custom budgets for testing purposes
-func (m *Memory) SetBudgetForTests(provider rate_limit.Provider, tokens int, requests int) error {
+func (m *Memory) SetBudgetForTests(provider groq.Provider, tokens int, requests int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -103,6 +104,6 @@ func (m *Memory) checkAndResetMinute() {
 	currentMinute := time.Now().Truncate(time.Minute)
 	if !m.currentMinute.Equal(currentMinute) {
 		m.currentMinute = currentMinute
-		m.state = make(map[rate_limit.Provider]usageData)
+		m.state = make(map[groq.Provider]usageData)
 	}
 }

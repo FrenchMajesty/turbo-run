@@ -3,6 +3,13 @@ package groq
 type ReasoningEffort string
 
 const (
+	ProviderGroq   Provider = "groq"
+	ProviderOpenAI Provider = "openai"
+)
+
+type Provider string
+
+const (
 	ReasoningEffortLow    ReasoningEffort = "low"
 	ReasoningEffortMedium ReasoningEffort = "medium"
 	ReasoningEffortHigh   ReasoningEffort = "high"

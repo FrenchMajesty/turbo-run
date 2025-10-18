@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/FrenchMajesty/turbo-run/clients/groq"
 	"github.com/FrenchMajesty/turbo-run/rate_limit"
 	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/memory"
 )
@@ -14,14 +15,14 @@ type usageData struct {
 }
 type consumptionTracker struct {
 	// Current cycle state
-	current       map[Provider]usageData
+	current       map[groq.Provider]usageData
 	currentMinute time.Time
 
 	// total stats
-	total map[Provider]usageData
+	total map[groq.Provider]usageData
 
 	// Historical data
-	history map[string]map[Provider]usageData
+	history map[string]map[groq.Provider]usageData
 
 	// Thread safety
 	mu sync.RWMutex
@@ -59,9 +60,9 @@ func NewConsumptionTracker(backend rate_limit.Backend) *consumptionTracker {
 	}
 
 	return &consumptionTracker{
-		current:              make(map[Provider]usageData),
-		total:                make(map[Provider]usageData),
-		history:              make(map[string]map[Provider]usageData),
+		current:              make(map[groq.Provider]usageData),
+		total:                make(map[groq.Provider]usageData),
+		history:              make(map[string]map[groq.Provider]usageData),
 		currentMinute:        time.Now().Truncate(time.Minute),
 		groqBudgetTokens:     int(rate_limit.GroqRateLimit.TPM),
 		openaiBudgetTokens:   int(rate_limit.OpenAIRateLimit.TPM),
@@ -84,14 +85,14 @@ func (ct *consumptionTracker) Cycle() {
 	}
 
 	writeIndex := ct.currentMinute.Format(time.RFC3339)
-	ct.history[writeIndex] = map[Provider]usageData{
-		ProviderGroq:   ct.current[ProviderGroq],
-		ProviderOpenAI: ct.current[ProviderOpenAI],
+	ct.history[writeIndex] = map[groq.Provider]usageData{
+		groq.ProviderGroq:   ct.current[groq.ProviderGroq],
+		groq.ProviderOpenAI: ct.current[groq.ProviderOpenAI],
 	}
 
 	ct.currentMinute = newMinute
-	ct.resetUsageData(ProviderGroq)
-	ct.resetUsageData(ProviderOpenAI)
+	ct.resetUsageData(groq.ProviderGroq)
+	ct.resetUsageData(groq.ProviderOpenAI)
 }
 
 // SetBudgetsForTests sets the budgets for the consumption tracker (used primarily for testing)
@@ -105,12 +106,12 @@ func (ct *consumptionTracker) SetBudgetsForTests(groqBudgetTokens int, openaiBud
 	ct.openaiBudgetRequests = openaiBudgetRequests
 
 	// Also update backend budgets for cross-process coordination
-	ct.backend.SetBudgetForTests(convertProvider(ProviderGroq), groqBudgetTokens, groqBudgetRequests)
-	ct.backend.SetBudgetForTests(convertProvider(ProviderOpenAI), openaiBudgetTokens, openaiBudgetRequests)
+	ct.backend.SetBudgetForTests(groq.ProviderGroq, groqBudgetTokens, groqBudgetRequests)
+	ct.backend.SetBudgetForTests(groq.ProviderOpenAI, openaiBudgetTokens, openaiBudgetRequests)
 }
 
 // RecordConsumption records the consumption for the current minute
-func (ct *consumptionTracker) RecordConsumption(provider Provider, tokens int) {
+func (ct *consumptionTracker) RecordConsumption(provider groq.Provider, tokens int) {
 	ct.mu.Lock()
 	defer ct.mu.Unlock()
 
@@ -125,7 +126,7 @@ func (ct *consumptionTracker) RecordConsumption(provider Provider, tokens int) {
 
 	// Also record in backend for cross-process coordination
 	// Don't fail if this doesn't work - local tracking is still functional
-	ct.backend.RecordConsumption(convertProvider(provider), tokens, 1)
+	ct.backend.RecordConsumption(provider, tokens, 1)
 }
 
 // TimeUntilReset returns the time until the current minute resets
@@ -135,9 +136,9 @@ func (ct *consumptionTracker) TimeUntilReset() time.Duration {
 }
 
 // BudgetAvailableForCycle returns the budget available for the current cycle for the given provider
-func (ct *consumptionTracker) BudgetAvailableForCycle(provider Provider) (int, int) {
+func (ct *consumptionTracker) BudgetAvailableForCycle(provider groq.Provider) (int, int) {
 	// Use backend for cross-process coordination
-	sharedTokens, sharedRequests := ct.backend.BudgetAvailable(convertProvider(provider))
+	sharedTokens, sharedRequests := ct.backend.BudgetAvailable(provider)
 
 	// Check and sync local state if needed
 	ct.mu.Lock()
@@ -145,8 +146,8 @@ func (ct *consumptionTracker) BudgetAvailableForCycle(provider Provider) (int, i
 	if !ct.currentMinute.Equal(currentMinute) {
 		// Local state is stale, sync it
 		ct.currentMinute = currentMinute
-		ct.resetUsageData(ProviderGroq)
-		ct.resetUsageData(ProviderOpenAI)
+		ct.resetUsageData(groq.ProviderGroq)
+		ct.resetUsageData(groq.ProviderOpenAI)
 	}
 
 	localTokens := ct.getAvailableTokens(provider)
@@ -207,8 +208,8 @@ func (ct *consumptionTracker) GetTotalConsumption() (int, int) {
 	ct.mu.RLock()
 	defer ct.mu.RUnlock()
 
-	totalTokens := ct.total[ProviderGroq].Tokens + ct.total[ProviderOpenAI].Tokens
-	totalRequests := ct.total[ProviderGroq].Requests + ct.total[ProviderOpenAI].Requests
+	totalTokens := ct.total[groq.ProviderGroq].Tokens + ct.total[groq.ProviderOpenAI].Tokens
+	totalRequests := ct.total[groq.ProviderGroq].Requests + ct.total[groq.ProviderOpenAI].Requests
 	return totalTokens, totalRequests
 }
 
@@ -217,8 +218,8 @@ func (ct *consumptionTracker) GetCurrentConsumption() (int, int) {
 	ct.mu.RLock()
 	defer ct.mu.RUnlock()
 
-	totalTokens := ct.current[ProviderGroq].Tokens + ct.current[ProviderOpenAI].Tokens
-	totalRequests := ct.current[ProviderGroq].Requests + ct.current[ProviderOpenAI].Requests
+	totalTokens := ct.current[groq.ProviderGroq].Tokens + ct.current[groq.ProviderOpenAI].Tokens
+	totalRequests := ct.current[groq.ProviderGroq].Requests + ct.current[groq.ProviderOpenAI].Requests
 	return totalTokens, totalRequests
 }
 
@@ -228,12 +229,12 @@ func (ct *consumptionTracker) GetStats() *ConsumptionTrackerStats {
 	defer ct.mu.RUnlock()
 
 	return &ConsumptionTrackerStats{
-		GroqCurrentTokens:   ct.current[ProviderGroq].Tokens,
-		GroqTotalTokens:     ct.total[ProviderGroq].Tokens,
-		OpenAICurrentTokens: ct.current[ProviderOpenAI].Tokens,
-		OpenAITotalTokens:   ct.total[ProviderOpenAI].Tokens,
-		TotalTokens:         ct.total[ProviderGroq].Tokens + ct.total[ProviderOpenAI].Tokens,
-		TotalRequests:       ct.total[ProviderGroq].Requests + ct.total[ProviderOpenAI].Requests,
+		GroqCurrentTokens:   ct.current[groq.ProviderGroq].Tokens,
+		GroqTotalTokens:     ct.total[groq.ProviderGroq].Tokens,
+		OpenAICurrentTokens: ct.current[groq.ProviderOpenAI].Tokens,
+		OpenAITotalTokens:   ct.total[groq.ProviderOpenAI].Tokens,
+		TotalTokens:         ct.total[groq.ProviderGroq].Tokens + ct.total[groq.ProviderOpenAI].Tokens,
+		TotalRequests:       ct.total[groq.ProviderGroq].Requests + ct.total[groq.ProviderOpenAI].Requests,
 		TimeUntilReset:      ct.TimeUntilReset(),
 		IsBlocked:           ct.IsBlocked(),
 	}
@@ -246,11 +247,11 @@ func (ct *consumptionTracker) IsBlocked() bool {
 
 // getAvailableTokens returns the available tokens for the given provider
 // Note: This method assumes the caller already holds a lock
-func (ct *consumptionTracker) getAvailableTokens(provider Provider) int {
+func (ct *consumptionTracker) getAvailableTokens(provider groq.Provider) int {
 	var tokenBudget int
 
 	switch provider {
-	case ProviderOpenAI:
+	case groq.ProviderOpenAI:
 		tokenBudget = ct.openaiBudgetTokens
 	default:
 		tokenBudget = ct.groqBudgetTokens
@@ -261,11 +262,11 @@ func (ct *consumptionTracker) getAvailableTokens(provider Provider) int {
 
 // getAvailableRequests returns the available requests for the given provider
 // Note: This method assumes the caller already holds a lock
-func (ct *consumptionTracker) getAvailableRequests(provider Provider) int {
+func (ct *consumptionTracker) getAvailableRequests(provider groq.Provider) int {
 	var requestBudget int
 
 	switch provider {
-	case ProviderOpenAI:
+	case groq.ProviderOpenAI:
 		requestBudget = ct.openaiBudgetRequests
 	default:
 		requestBudget = ct.groqBudgetRequests
@@ -276,7 +277,7 @@ func (ct *consumptionTracker) getAvailableRequests(provider Provider) int {
 
 // resetUsageData resets the usage data for the given provider
 // Note: This method assumes the caller already holds a lock
-func (ct *consumptionTracker) resetUsageData(provider Provider) {
+func (ct *consumptionTracker) resetUsageData(provider groq.Provider) {
 	ct.current[provider] = usageData{
 		Tokens:   0,
 		Requests: 0,
@@ -285,7 +286,7 @@ func (ct *consumptionTracker) resetUsageData(provider Provider) {
 
 // increaseTokens increases the tokens for the given provider
 // Note: This method assumes the caller already holds a lock
-func (ct *consumptionTracker) increaseTokens(provider Provider, tokens int) {
+func (ct *consumptionTracker) increaseTokens(provider groq.Provider, tokens int) {
 	currentData := ct.current[provider]
 	currentData.Tokens += tokens
 	ct.current[provider] = currentData
@@ -293,20 +294,8 @@ func (ct *consumptionTracker) increaseTokens(provider Provider, tokens int) {
 
 // increaseRequests increases the requests for the given provider
 // Note: This method assumes the caller already holds a lock
-func (ct *consumptionTracker) increaseRequests(provider Provider, requests int) {
+func (ct *consumptionTracker) increaseRequests(provider groq.Provider, requests int) {
 	currentData := ct.current[provider]
 	currentData.Requests += requests
 	ct.current[provider] = currentData
-}
-
-// convertProvider converts turbo_run.Provider to ratelimit.Provider
-func convertProvider(p Provider) rate_limit.Provider {
-	switch p {
-	case ProviderGroq:
-		return rate_limit.ProviderGroq
-	case ProviderOpenAI:
-		return rate_limit.ProviderOpenAI
-	default:
-		return rate_limit.ProviderGroq
-	}
 }

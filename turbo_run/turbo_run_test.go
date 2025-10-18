@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
-	"github.com/FrenchMajesty/turbo-run/ratelimit"
+	"github.com/FrenchMajesty/turbo-run/rate_limit"
 	openai "github.com/openai/openai-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -188,14 +188,14 @@ func TestTurboRun_BudgetEnforcementDirectly(t *testing.T) {
 	t.Logf("Total estimated tokens for %d nodes: %d", nodeCount, totalEstimatedTokens)
 
 	// Get initial available budget (N)
-	availableBudget, _ := tr.tracker.BudgetAvailableForCycle(ProviderGroq)
+	availableBudget, _ := tr.tracker.BudgetAvailableForCycle(groq.ProviderGroq)
 	t.Logf("Initial available budget: %d tokens", availableBudget)
 
 	// Allow system time to process/launch all nodes and consume budget
 	time.Sleep(100 * time.Millisecond)
 
 	// Check budget after nodes are launched (budget consumed upfront)
-	budgetAfterLaunch, _ := tr.tracker.BudgetAvailableForCycle(ProviderGroq)
+	budgetAfterLaunch, _ := tr.tracker.BudgetAvailableForCycle(groq.ProviderGroq)
 	t.Logf("Budget after launch: %d tokens", budgetAfterLaunch)
 
 	// Validate: budget was consumed when nodes were launched
@@ -767,10 +767,10 @@ func TestTurboRun_BudgetExhaustionBlocking(t *testing.T) {
 	mockOpenAI := &openai.Client{}
 
 	// Store original limits to restore after test
-	originalGroqTokens := int(ratelimit.GroqRateLimit.TPM)
-	originalGroqRequests := ratelimit.GroqRateLimit.RPM
-	originalOpenAITokens := int(ratelimit.OpenAIRateLimit.TPM)
-	originalOpenAIRequests := ratelimit.OpenAIRateLimit.RPM
+	originalGroqTokens := int(rate_limit.GroqRateLimit.TPM)
+	originalGroqRequests := rate_limit.GroqRateLimit.RPM
+	originalOpenAITokens := int(rate_limit.OpenAIRateLimit.TPM)
+	originalOpenAIRequests := rate_limit.OpenAIRateLimit.RPM
 
 	// Mock responses
 	mockGroq.On("ChatCompletion", mock.Anything, mock.Anything).Return(
@@ -827,7 +827,7 @@ func TestTurboRun_BudgetExhaustionBlocking(t *testing.T) {
 	assert.True(t, stats.LaunchedCount <= 1, "Should have launched very few nodes due to budget constraints, got %d", stats.LaunchedCount)
 
 	// Check budget availability - should be at or near the limit
-	availableTokens, availableRequests := tr.tracker.BudgetAvailableForCycle(ProviderGroq)
+	availableTokens, availableRequests := tr.tracker.BudgetAvailableForCycle(groq.ProviderGroq)
 	t.Logf("Budget after initial processing - Available tokens: %d, requests: %d", availableTokens, availableRequests)
 
 	// Budget should be insufficient for remaining nodes (each node needs 33 tokens, we have 10)
@@ -849,7 +849,7 @@ func TestTurboRun_BudgetExhaustionBlocking(t *testing.T) {
 
 	// Get updated stats after waiting
 	statsAfterWait := tr.GetStats()
-	finalAvailableTokens, finalAvailableRequests := tr.tracker.BudgetAvailableForCycle(ProviderGroq)
+	finalAvailableTokens, finalAvailableRequests := tr.tracker.BudgetAvailableForCycle(groq.ProviderGroq)
 
 	t.Logf("After waiting - Launched: %d (was %d), Available tokens: %d (was %d), requests: %d (was %d)",
 		statsAfterWait.LaunchedCount, initialLaunchedCount,

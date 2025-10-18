@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
+	"github.com/FrenchMajesty/turbo-run/rate_limit"
 	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/uds"
-	"github.com/FrenchMajesty/turbo-run/ratelimit"
 	"github.com/FrenchMajesty/turbo-run/utils/priority_queue"
 	"github.com/google/uuid"
 	openai "github.com/openai/openai-go/v2"
@@ -88,7 +88,7 @@ func NewTurboRun(
 func NewTurboRunWithBackend(
 	groq groq.GroqClientInterface,
 	openai *openai.Client,
-	backend ratelimit.Backend,
+	backend rate_limit.Backend,
 ) *TurboRun {
 	once.Do(func() {
 		// Setup file logger
@@ -205,7 +205,7 @@ func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]interface{}{
 		"dependencies":     []string{},
 		"estimated_tokens": workNode.GetEstimatedTokens(),
-		"provider":         tr.providerToString(workNode.GetProvider()),
+		"provider":         string(workNode.GetProvider()),
 	})
 
 	return tr
@@ -225,22 +225,10 @@ func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid
 	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]interface{}{
 		"dependencies":     depStrings,
 		"estimated_tokens": workNode.GetEstimatedTokens(),
-		"provider":         tr.providerToString(workNode.GetProvider()),
+		"provider":         string(workNode.GetProvider()),
 	})
 
 	return tr
-}
-
-// providerToString converts Provider to string
-func (tr *TurboRun) providerToString(p Provider) string {
-	switch p {
-	case ProviderGroq:
-		return "groq"
-	case ProviderOpenAI:
-		return "openai"
-	default:
-		return "unknown"
-	}
 }
 
 // WaitFor waits for the result of a work node

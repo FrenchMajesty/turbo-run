@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/FrenchMajesty/turbo-run/clients/groq"
 	"github.com/FrenchMajesty/turbo-run/rate_limit"
 )
 
@@ -19,14 +20,14 @@ type Client struct {
 	conn    net.Conn
 	mu      sync.Mutex
 	reader  *bufio.Reader
-	budgets map[rate_limit.Provider]rate_limit.RateLimit
+	budgets map[groq.Provider]rate_limit.RateLimit
 }
 
 // NewClient creates a new UDS rate limiter client
 func NewClient() *Client {
-	budgets := map[rate_limit.Provider]rate_limit.RateLimit{
-		rate_limit.ProviderGroq:   rate_limit.GroqRateLimit,
-		rate_limit.ProviderOpenAI: rate_limit.OpenAIRateLimit,
+	budgets := map[groq.Provider]rate_limit.RateLimit{
+		groq.ProviderGroq:   rate_limit.GroqRateLimit,
+		groq.ProviderOpenAI: rate_limit.OpenAIRateLimit,
 	}
 
 	client := &Client{
@@ -136,7 +137,7 @@ func (c *Client) sendCommand(command string) (string, error) {
 }
 
 // BudgetAvailable returns available budget for the given provider
-func (c *Client) BudgetAvailable(provider rate_limit.Provider) (tokensAvailable int, requestsAvailable int) {
+func (c *Client) BudgetAvailable(provider groq.Provider) (tokensAvailable int, requestsAvailable int) {
 	providerKey := c.getProviderKey(provider)
 	response, err := c.sendCommand(fmt.Sprintf("BUDGET %s", providerKey))
 	if err != nil {
@@ -163,7 +164,7 @@ func (c *Client) BudgetAvailable(provider rate_limit.Provider) (tokensAvailable 
 }
 
 // RecordConsumption records usage for the given provider
-func (c *Client) RecordConsumption(provider rate_limit.Provider, tokens int, requests int) error {
+func (c *Client) RecordConsumption(provider groq.Provider, tokens int, requests int) error {
 	providerKey := c.getProviderKey(provider)
 	_, err := c.sendCommand(fmt.Sprintf("CONSUME %s %d %d", providerKey, tokens, requests))
 	return err
@@ -190,7 +191,7 @@ func (c *Client) TimeUntilReset() time.Duration {
 }
 
 // SetBudgetForTests sets custom budgets for testing
-func (c *Client) SetBudgetForTests(provider rate_limit.Provider, tokens, requests int) error {
+func (c *Client) SetBudgetForTests(provider groq.Provider, tokens, requests int) error {
 	providerKey := c.getProviderKey(provider)
 	_, err := c.sendCommand(fmt.Sprintf("SET_BUDGET %s %d %d", providerKey, tokens, requests))
 	return err
@@ -208,11 +209,11 @@ func (c *Client) Close() error {
 }
 
 // getProviderKey returns a string key for the provider
-func (c *Client) getProviderKey(provider rate_limit.Provider) string {
+func (c *Client) getProviderKey(provider groq.Provider) string {
 	switch provider {
-	case rate_limit.ProviderGroq:
+	case groq.ProviderGroq:
 		return "groq"
-	case rate_limit.ProviderOpenAI:
+	case groq.ProviderOpenAI:
 		return "openai"
 	default:
 		return "unknown"

@@ -16,13 +16,6 @@ import (
 	openai "github.com/openai/openai-go/v2"
 )
 
-type Provider int
-
-const (
-	ProviderGroq Provider = iota
-	ProviderOpenAI
-)
-
 type WorkNodeStatus int
 
 const (
@@ -37,7 +30,7 @@ var tokenCounter, _ = token_counter.NewTokenCounter()
 type WorkNode struct {
 	ID              uuid.UUID
 	workFn          func(w *WorkNode, groq *groq.GroqClientInterface, openai *openai.Client) RunResult
-	provider        Provider
+	provider        groq.Provider
 	estimatedTokens int
 	groqReq         groq.ChatCompletionRequest
 	openaiReq       openai.ChatCompletionNewParams
@@ -63,7 +56,7 @@ type RunResult struct {
 
 type WorkNodeExecutableFunc func(w *WorkNode, groq *groq.GroqClientInterface, openai *openai.Client) RunResult
 
-func newWorkNode(provider Provider) *WorkNode {
+func newWorkNode(provider groq.Provider) *WorkNode {
 	node := &WorkNode{
 		ID:              uuid.New(),
 		provider:        provider,
@@ -79,7 +72,7 @@ func newWorkNode(provider Provider) *WorkNode {
 
 // NewWorkNodeForGroq creates a new work node for a groq request
 func NewWorkNodeForGroq(body groq.ChatCompletionRequest) *WorkNode {
-	node := newWorkNode(ProviderGroq)
+	node := newWorkNode(groq.ProviderGroq)
 	node.groqReq = body
 	node.estimatedTokens = tokenCounter.CountRequestTokens(body)
 	node.estimatedTokens += (node.estimatedTokens * 20 / 100) // 20% overhead for response tokens
@@ -89,7 +82,7 @@ func NewWorkNodeForGroq(body groq.ChatCompletionRequest) *WorkNode {
 
 // NewWorkNodeForOpenAI creates a new work node for an openai request
 func NewWorkNodeForOpenAI(body openai.ChatCompletionNewParams) *WorkNode {
-	node := newWorkNode(ProviderOpenAI)
+	node := newWorkNode(groq.ProviderOpenAI)
 	node.openaiReq = body
 	bodyBytes, _ := json.Marshal(body)
 	node.estimatedTokens = tokenCounter.CountTextTokens(string(bodyBytes))
@@ -153,7 +146,7 @@ func (w *WorkNode) GetEstimatedTokens() int {
 }
 
 // GetProvider returns the provider for the work node
-func (w *WorkNode) GetProvider() Provider {
+func (w *WorkNode) GetProvider() groq.Provider {
 	return w.provider
 }
 
