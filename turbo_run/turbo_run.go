@@ -21,6 +21,7 @@ import (
 type EventType string
 
 const (
+	// Node lifecycle events
 	EventNodeCreated     EventType = "node_created"
 	EventNodeReady       EventType = "node_ready"
 	EventNodePrioritized EventType = "node_prioritized"
@@ -29,6 +30,12 @@ const (
 	EventNodeRetrying    EventType = "node_retrying"
 	EventNodeCompleted   EventType = "node_completed"
 	EventNodeFailed      EventType = "node_failed"
+
+	// Rate limit budget events
+	EventBudgetConsumed EventType = "budget_consumed"
+	EventBudgetBlocked  EventType = "budget_blocked"
+	EventBudgetReset    EventType = "budget_reset"
+	EventBudgetWarning  EventType = "budget_warning"
 )
 
 type Event struct {
@@ -304,10 +311,23 @@ func (tr *TurboRun) listenForLaunchPad() {
 			node, _ := tr.priorityQueue.Pop()
 
 			// Wait until we have enough budget for this request
+			blocked := false
 			for {
 				tokensBudget, requestBudget := tr.tracker.BudgetAvailableForCycle(node.GetProvider())
 				if tokensBudget >= node.GetEstimatedTokens() && requestBudget >= 1 {
 					break // We have enough budget, proceed
+				}
+
+				// Emit blocking event only once per node
+				if !blocked {
+					blocked = true
+					tr.emitEvent(EventBudgetBlocked, node.ID, map[string]interface{}{
+						"provider":           providerName(node.GetProvider()),
+						"needed_tokens":      node.GetEstimatedTokens(),
+						"available_tokens":   tokensBudget,
+						"available_requests": requestBudget,
+						"time_until_reset":   tr.tracker.TimeUntilReset().String(),
+					})
 				}
 
 				// Not enough budget, wait until cycle reset
@@ -316,6 +336,29 @@ func (tr *TurboRun) listenForLaunchPad() {
 			}
 
 			tr.tracker.RecordConsumption(node.GetProvider(), node.GetEstimatedTokens())
+
+			// Emit budget consumption event
+			tokensAvailable, requestsAvailable := tr.tracker.BudgetAvailableForCycle(node.GetProvider())
+			totalTokens := tr.getBudgetTotal(node.GetProvider())
+			utilizationPct := float64(totalTokens-tokensAvailable) / float64(totalTokens) * 100
+
+			tr.emitEvent(EventBudgetConsumed, uuid.Nil, map[string]interface{}{
+				"provider":           providerName(node.GetProvider()),
+				"tokens_consumed":    node.GetEstimatedTokens(),
+				"tokens_available":   tokensAvailable,
+				"requests_available": requestsAvailable,
+				"tokens_total":       totalTokens,
+				"utilization_pct":    utilizationPct,
+			})
+
+			// Emit budget warning if utilization is high
+			if utilizationPct >= 80 {
+				tr.emitEvent(EventBudgetWarning, uuid.Nil, map[string]interface{}{
+					"provider":         providerName(node.GetProvider()),
+					"utilization_pct":  utilizationPct,
+					"tokens_available": tokensAvailable,
+				})
+			}
 
 			// Emit node dispatched event
 			tr.emitEvent(EventNodeDispatched, node.ID, map[string]interface{}{
@@ -384,6 +427,12 @@ func (tr *TurboRun) startMinuteTimer() {
 // onMinuteChange is called when the minute changes
 func (tr *TurboRun) onMinuteChange() {
 	tr.tracker.Cycle()
+
+	// Emit budget reset event
+	tr.emitEvent(EventBudgetReset, uuid.Nil, map[string]interface{}{
+		"timestamp": time.Now().Format(time.RFC3339),
+		"providers": []string{"groq", "openai"},
+	})
 }
 
 // startAnalyticsLogger starts a timer that logs stats every 20 seconds
@@ -533,4 +582,28 @@ func projectRoot() string {
 	}
 
 	return currentDir
+}
+
+// providerName converts Provider enum to string for event data
+func providerName(p groq.Provider) string {
+	switch p {
+	case groq.ProviderGroq:
+		return "groq"
+	case groq.ProviderOpenAI:
+		return "openai"
+	default:
+		return "unknown"
+	}
+}
+
+// getBudgetTotal returns the total token budget for a provider
+func (tr *TurboRun) getBudgetTotal(provider groq.Provider) int {
+	switch provider {
+	case groq.ProviderGroq:
+		return int(rate_limit.GroqRateLimit.TPM)
+	case groq.ProviderOpenAI:
+		return int(rate_limit.OpenAIRateLimit.TPM)
+	default:
+		return 0
+	}
 }
