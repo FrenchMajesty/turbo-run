@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
+	"github.com/FrenchMajesty/turbo-run/utils/logger"
 	"github.com/FrenchMajesty/turbo-run/utils/retry"
 	"github.com/FrenchMajesty/turbo-run/utils/token_counter"
 	"github.com/google/uuid"
@@ -39,6 +40,7 @@ type WorkNode struct {
 	// Misc
 	verboseLog bool
 	status     WorkNodeStatus
+	logger     logger.Logger
 
 	// Orchestration
 	mu              sync.RWMutex
@@ -65,9 +67,16 @@ func newWorkNode(provider groq.Provider) *WorkNode {
 		status:          WorkNodeStatusPending,
 		mu:              sync.RWMutex{},
 		resultCallbacks: []func(RunResult){},
+		logger:          logger.NewNoopLogger(), // Default to noop
 	}
 
 	return node
+}
+
+// SetLogger sets the logger for this WorkNode
+func (w *WorkNode) SetLogger(l logger.Logger) *WorkNode {
+	w.logger = l
+	return w
 }
 
 // NewWorkNodeForGroq creates a new work node for a groq request
@@ -228,7 +237,7 @@ func (w *WorkNode) wrapWithRetry(workFn WorkNodeExecutableFunc) WorkNodeExecutab
 				}
 
 				if w.verboseLog {
-					fmt.Printf("WorkNode retry attempt %d/%d after %v delay for node %s",
+					w.logger.Printf("WorkNode retry attempt %d/%d after %v delay for node %s",
 						attempt+1, w.retryConfig.MaxRetries+1, delay, w.ID)
 				}
 				time.Sleep(delay)
@@ -241,7 +250,7 @@ func (w *WorkNode) wrapWithRetry(workFn WorkNodeExecutableFunc) WorkNodeExecutab
 			// If successful, return immediately
 			if result.Error == nil {
 				if attempt > 0 && w.verboseLog {
-					fmt.Printf("WorkNode succeeded on attempt %d/%d for node %s",
+					w.logger.Printf("WorkNode succeeded on attempt %d/%d for node %s",
 						attempt+1, w.retryConfig.MaxRetries+1, w.ID)
 				}
 				return result
@@ -250,7 +259,7 @@ func (w *WorkNode) wrapWithRetry(workFn WorkNodeExecutableFunc) WorkNodeExecutab
 			// Check if this is a retryable error
 			if w.isRetryableError(result.Error) && attempt < w.retryConfig.MaxRetries {
 				if w.verboseLog {
-					fmt.Printf("WorkNode retryable error (attempt %d/%d) for node %s: %v",
+					w.logger.Printf("WorkNode retryable error (attempt %d/%d) for node %s: %v",
 						attempt+1, w.retryConfig.MaxRetries+1, w.ID, result.Error)
 				}
 				continue
@@ -258,14 +267,14 @@ func (w *WorkNode) wrapWithRetry(workFn WorkNodeExecutableFunc) WorkNodeExecutab
 
 			// Non-retryable error or max retries exceeded
 			if w.verboseLog && attempt < w.retryConfig.MaxRetries {
-				fmt.Printf("WorkNode non-retryable error for node %s: %v", w.ID, result.Error)
+				w.logger.Printf("WorkNode non-retryable error for node %s: %v", w.ID, result.Error)
 			}
 			break
 		}
 
 		// All retries exhausted, return the last result
 		if w.verboseLog {
-			fmt.Printf("WorkNode failed after %d attempts for node %s, last error: %v",
+			w.logger.Printf("WorkNode failed after %d attempts for node %s, last error: %v",
 				w.retryConfig.MaxRetries+1, w.ID, lastResult.Error)
 		}
 		return lastResult

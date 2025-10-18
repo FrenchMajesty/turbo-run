@@ -2,17 +2,15 @@ package turbo_run
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
 	"github.com/FrenchMajesty/turbo-run/rate_limit"
 	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/memory"
+	"github.com/FrenchMajesty/turbo-run/utils/logger"
 	"github.com/FrenchMajesty/turbo-run/utils/priority_queue"
 	"github.com/google/uuid"
 	openai "github.com/openai/openai-go/v2"
@@ -59,9 +57,8 @@ type TurboRun struct {
 	workerStateChan chan int
 
 	// Misc
-	mu         sync.RWMutex // protects launchedCount and stats reading
-	fileLogger *log.Logger  // for logging to file
-	logFile    *os.File     // file handle for locking
+	mu     sync.RWMutex      // protects launchedCount and stats reading
+	logger logger.Logger     // pluggable logger
 
 	// Stats attributes
 	uniqueID       string
@@ -86,11 +83,22 @@ type TurboRunStats struct {
 var instance *TurboRun
 var once sync.Once
 
+// TurboRunOption is a functional option for configuring TurboRun
+type TurboRunOption func(*TurboRun)
+
+// WithLogger sets a custom logger for TurboRun
+func WithLogger(l logger.Logger) TurboRunOption {
+	return func(tr *TurboRun) {
+		tr.logger = l
+	}
+}
+
 func NewTurboRun(
 	groq groq.GroqClientInterface,
 	openai *openai.Client,
+	opts ...TurboRunOption,
 ) *TurboRun {
-	return NewTurboRunWithBackend(groq, openai, nil)
+	return NewTurboRunWithBackend(groq, openai, nil, opts...)
 }
 
 // NewTurboRunWithBackend creates a new TurboRun instance with a custom rate limit backend.
@@ -99,12 +107,11 @@ func NewTurboRunWithBackend(
 	groq groq.GroqClientInterface,
 	openai *openai.Client,
 	backend rate_limit.Backend,
+	opts ...TurboRunOption,
 ) *TurboRun {
 	once.Do(func() {
-		// Setup file logger
 		env := os.Getenv("ENV")
 		uniqueID := uuid.New().String()[:6]
-		fileLogger, logFile := prepareFileLogger(env, uniqueID)
 
 		// Default to in-memory backend
 		if backend == nil {
@@ -122,22 +129,24 @@ func NewTurboRunWithBackend(
 			launchpad:       make(chan any, 100),
 			eventChan:       make(chan *Event, 1000),
 			workerStateChan: workerStateChan,
-			fileLogger:      fileLogger,
-			logFile:         logFile,
+			logger:          logger.NewStdoutLogger(), // Default to stdout
 			startTime:       time.Now(),
+		}
+
+		// Apply functional options
+		for _, opt := range opts {
+			opt(instance)
 		}
 
 		instance.workersPool = NewWorkerPool(120, &groq, openai, workerStateChan)
 
 		instance.Start()
 
-		// Log initial startup in dev/testing
+		// Log initial startup
 		if env == "dev" || env == "testing" {
-			fmt.Printf("TurboRun %s: Started with %d workers\n", instance.uniqueID, 120)
-			instance.logToFileWithLockf("TurboRun %s: Started with %d workers", instance.uniqueID, 120)
+			instance.logger.Printf("TurboRun %s: Started with %d workers", instance.uniqueID, 120)
 		} else {
-			// Always log startup to file, regardless of environment, to track all instances
-			instance.logToFileWithLockf("TurboRun %s: Started with %d workers (env=%s)", instance.uniqueID, 120, env)
+			instance.logger.Printf("TurboRun %s: Started with %d workers (env=%s)", instance.uniqueID, 120, env)
 		}
 	})
 
@@ -175,10 +184,11 @@ func (tr *TurboRun) Stop() {
 	close(tr.quit)
 
 	// Log shutdown
-	tr.logToFileWithLockf("TurboRun %s: Shutting down", tr.uniqueID)
+	tr.logger.Printf("TurboRun %s: Shutting down", tr.uniqueID)
 
-	if tr.logFile != nil {
-		tr.logFile.Close()
+	// Close file logger if it's a FileLogger
+	if fileLogger, ok := tr.logger.(*logger.FileLogger); ok {
+		fileLogger.Close()
 	}
 
 	if tr.eventChan != nil {
@@ -214,6 +224,11 @@ func (tr *TurboRun) emitEvent(eventType EventType, nodeID uuid.UUID, data map[st
 
 // Push adds a work node to the graph with no dependencies
 func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
+	// Set logger on the WorkNode if it doesn't have one
+	if _, ok := workNode.logger.(*logger.NoopLogger); workNode.logger == nil || ok {
+		workNode.SetLogger(tr.logger)
+	}
+
 	tr.graph.Add(workNode, []uuid.UUID{})
 
 	// Emit node created event
@@ -228,6 +243,11 @@ func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 
 // PushWithDependencies adds a work node to the graph with dependencies
 func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid.UUID) *TurboRun {
+	// Set logger on the WorkNode if it doesn't have one
+	if _, ok := workNode.logger.(*logger.NoopLogger); workNode.logger == nil || ok {
+		workNode.SetLogger(tr.logger)
+	}
+
 	tr.graph.Add(workNode, dependencies)
 
 	// Convert dependencies to strings for JSON
@@ -494,7 +514,7 @@ func (tr *TurboRun) logStats(shutdown bool) {
 	stats := tr.GetStats()
 
 	if shutdown {
-		logMessage := fmt.Sprintf(
+		tr.logger.Printf(
 			"TurboRun %s: Shutting down. Total nodes launched: %d. Total nodes failed: %d. Total tokens used: %s. Requests made: %d. Time taken: %s",
 			tr.uniqueID,
 			stats.LaunchedCount,
@@ -503,17 +523,13 @@ func (tr *TurboRun) logStats(shutdown bool) {
 			stats.TrackerStats.TotalRequests,
 			time.Since(tr.startTime),
 		)
-
-		fmt.Println(logMessage)
-		tr.logToFileWithLock(logMessage)
-
 		return
 	}
 
 	// Only log if there's activity (busy workers, items in queue, or recent launches)
 	if stats.WorkersPoolBusy > 0 || stats.PriorityQueueSize > 0 || stats.LaunchedCount > 0 {
 		trackerStats := stats.TrackerStats
-		logMessage := fmt.Sprintf("TurboRun %s: Workers(%d/%d) Queue(%d) Graph(%d) Launched(%d) Failed(%d) Tokens(groq:%s openai:%s total:%s)",
+		tr.logger.Printf("TurboRun %s: Workers(%d/%d) Queue(%d) Graph(%d) Launched(%d) Failed(%d) Tokens(groq:%s openai:%s total:%s)",
 			tr.uniqueID,
 			stats.WorkersPoolBusy,
 			stats.WorkersPoolSize,
@@ -525,67 +541,7 @@ func (tr *TurboRun) logStats(shutdown bool) {
 			formatTokens(trackerStats.OpenAICurrentTokens),
 			formatTokens(trackerStats.TotalTokens),
 		)
-
-		// Log to terminal
-		fmt.Println(logMessage)
-
-		// Log to file if available
-		tr.logToFileWithLock(logMessage)
 	}
-}
-
-// logToFileWithLock writes to the log file with file-level locking for cross-process safety
-func (tr *TurboRun) logToFileWithLock(message string) {
-	if tr.fileLogger == nil || tr.logFile == nil {
-		return
-	}
-
-	// Acquire exclusive file lock (blocks until available)
-	err := syscall.Flock(int(tr.logFile.Fd()), syscall.LOCK_EX)
-	if err != nil {
-		// If we can't get the lock, skip logging to avoid blocking
-		return
-	}
-	defer syscall.Flock(int(tr.logFile.Fd()), syscall.LOCK_UN) // Release lock
-
-	// Write to log
-	tr.fileLogger.Println(message)
-}
-
-// logToFileWithLockf writes formatted message to the log file with file-level locking
-func (tr *TurboRun) logToFileWithLockf(format string, args ...interface{}) {
-	if tr.fileLogger == nil || tr.logFile == nil {
-		return
-	}
-
-	// Acquire exclusive file lock (blocks until available)
-	err := syscall.Flock(int(tr.logFile.Fd()), syscall.LOCK_EX)
-	if err != nil {
-		// If we can't get the lock, skip logging to avoid blocking
-		return
-	}
-	defer syscall.Flock(int(tr.logFile.Fd()), syscall.LOCK_UN) // Release lock
-
-	// Write to log
-	tr.fileLogger.Printf(format, args...)
-}
-
-// prepareFileLogger prepares the file logger for the turbo run
-func prepareFileLogger(env string, uniqueID string) (*log.Logger, *os.File) {
-	filePath := filepath.Join(projectRoot(), "turbo_run.log")
-	if env == "dev" || env == "testing" {
-		// Delete old log file if it exists
-		if _, err := os.Stat(filePath); err == nil {
-			os.Remove(filePath)
-		}
-
-		if file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err == nil {
-			logger := log.New(file, "", log.LstdFlags)
-			return logger, file
-		}
-	}
-
-	return nil, nil
 }
 
 // formatTokens formats token counts in a human-readable way
@@ -596,29 +552,6 @@ func formatTokens(tokens int) string {
 		return fmt.Sprintf("%.1fK", float64(tokens)/1000)
 	}
 	return fmt.Sprintf("%d", tokens)
-}
-
-// projectRoot returns the root directory of the project in absolute path
-func projectRoot() string {
-	currentDir, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-
-	for {
-		goModPath := filepath.Join(currentDir, "go.mod")
-		if _, err := os.Stat(goModPath); err == nil {
-			break
-		}
-
-		parent := filepath.Dir(currentDir)
-		if parent == currentDir {
-			panic(fmt.Errorf("go.mod not found"))
-		}
-		currentDir = parent
-	}
-
-	return currentDir
 }
 
 // providerName converts Provider enum to string for event data
