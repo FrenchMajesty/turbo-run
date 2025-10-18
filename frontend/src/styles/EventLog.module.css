@@ -1,0 +1,46 @@
+.eventLog {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.eventLog h2 {
+  margin-bottom: 15px;
+  color: #667eea;
+}
+
+.eventList {
+  display: flex;
+  flex-direction: column;
+}
+
+.event {
+  padding: 10px;
+  margin-bottom: 8px;
+  border-radius: 5px;
+  background: #f9fafb;
+  font-size: 0.85em;
+  border-left: 3px solid #667eea;
+}
+
+.eventTime {
+  color: #999;
+  font-size: 0.85em;
+}
+
+.eventType {
+  font-weight: bold;
+  color: #667eea;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  margin-left: 10px;
+}
+
+.eventNode {
+  font-family: monospace;
+  color: #666;
+  margin-left: 10px;
+}

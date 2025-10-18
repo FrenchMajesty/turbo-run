@@ -1,0 +1,26 @@
+.statsDashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.statCard {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.statCard h3 {
+  font-size: 0.9em;
+  color: #666;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.statCard .value {
+  font-size: 2em;
+  font-weight: bold;
+  color: #667eea;
+}

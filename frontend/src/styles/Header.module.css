@@ -1,0 +1,60 @@
+.header {
+  background: white;
+  padding: 20px 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.title {
+  color: #667eea;
+  font-size: 2em;
+  margin-bottom: 10px;
+}
+
+.connectionStatus {
+  display: inline-block;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 0.9em;
+  font-weight: bold;
+}
+
+.connectionStatus.connected {
+  background: #10b981;
+  color: white;
+}
+
+.connectionStatus.disconnected {
+  background: #ef4444;
+  color: white;
+}
+
+.startButton {
+  padding: 12px 30px;
+  font-size: 1.1em;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #667eea;
+  color: white;
+  transition: all 0.3s ease;
+  margin-left: 20px;
+}
+
+.startButton:hover:not(:disabled) {
+  background: #5568d3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.startButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.startButton.processing {
+  background: #f59e0b;
+}
