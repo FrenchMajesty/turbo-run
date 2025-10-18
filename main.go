@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
+	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/uds"
 	"github.com/FrenchMajesty/turbo-run/server"
 	"github.com/FrenchMajesty/turbo-run/turbo_run"
 	"github.com/gofiber/fiber/v2"
@@ -53,6 +54,16 @@ func (m *MockGroqClient) ChatCompletionStream(ctx context.Context, req groq.Chat
 }
 
 func main() {
+	// Check for subcommands
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "rate-limiter":
+			// Run the rate limit manager server
+			uds.RunServer()
+			return
+		}
+	}
+
 	// Set environment to dev for verbose logging
 	os.Setenv("ENV", "dev")
 	port := 8081
@@ -212,5 +223,5 @@ func generateDemoWorkload(tr *turbo_run.TurboRun) {
 	fmt.Println("   - 4 diamond pattern nodes")
 	fmt.Println("   - 3 independent nodes")
 	fmt.Println("   - 1 final summary node")
-	fmt.Println("\n🎬 Processing started! Watch the visualization in your browser.\n")
+	fmt.Println("\n🎬 Processing started! Watch the visualization in your browser.")
 }
