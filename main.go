@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +13,7 @@ import (
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
 	"github.com/FrenchMajesty/turbo-run/server"
 	"github.com/FrenchMajesty/turbo-run/turbo_run"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
@@ -55,6 +55,8 @@ func (m *MockGroqClient) ChatCompletionStream(ctx context.Context, req groq.Chat
 func main() {
 	// Set environment to dev for verbose logging
 	os.Setenv("ENV", "dev")
+	port := 8081
+	os.Setenv("PORT", fmt.Sprintf("%d", port))
 
 	fmt.Println("🚀 TurboRun WebSocket Visualization Demo")
 	fmt.Println("=========================================")
@@ -64,36 +66,43 @@ func main() {
 
 	// Initialize TurboRun
 	turboRun := turbo_run.NewTurboRun(mockGroq, nil)
-	defer turboRun.Stop()
 
 	// Override budgets for demo (allow unlimited requests)
 	turboRun.OverrideBudgetsForTests(1000000, 1000000, 10000, 10000)
 
+	// Create Fiber app
+	app := fiber.New()
+
 	// Initialize WebSocket server with workload generator
-	wsServer := server.NewWebSocketServer(turboRun, generateDemoWorkload)
-	wsServer.Start()
+	server.Initialize(turboRun, generateDemoWorkload)
 
-	// Setup HTTP server
-	http.Handle("/socket.io/", wsServer.HttpHandler())
-	http.Handle("/", http.FileServer(http.Dir("./static")))
+	// Setup Socket.IO WebSocket routes (MUST be first, before any other middleware)
+	server.SetupHandlers(app)
 
-	// Start HTTP server in goroutine
+	// Serve static files (MUST be after Socket.IO setup)
+	app.Static("/", "./static")
+
+	// Start event broadcasting
+	server.Start()
+
+	// Set up graceful shutdown
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
 	go func() {
-		fmt.Println("📡 WebSocket server running on http://localhost:8080")
-		fmt.Println("🎨 Open http://localhost:8080 in your browser to see the visualization")
-		fmt.Println("⏸️  Processing will start when you click 'Start Processing' in the UI")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
+		if err := app.Listen(fmt.Sprintf(":%d", port)); err != nil {
 			log.Fatalf("HTTP server error: %v", err)
 		}
 	}()
 
 	// Wait for interrupt signal
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
-
+	<-c
 	fmt.Println("\n👋 Shutting down gracefully...")
-	wsServer.Shutdown()
+
+	if err := app.Shutdown(); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+	turboRun.Stop()
 }
 
 // generateDemoWorkload creates a complex dependency graph of WorkNodes

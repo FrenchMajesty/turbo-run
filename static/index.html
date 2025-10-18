@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -28,7 +29,7 @@
             background: white;
             padding: 20px 30px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
         }
 
@@ -96,7 +97,7 @@
             background: white;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
         .stat-card h3 {
@@ -122,7 +123,7 @@
             background: white;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             max-height: 70vh;
             overflow-y: auto;
         }
@@ -184,14 +185,31 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
         }
 
         @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
         }
 
         .node-id {
@@ -220,7 +238,7 @@
             background: white;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             max-height: 70vh;
             overflow-y: auto;
         }
@@ -275,6 +293,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -329,14 +348,16 @@
         let completedCount = 0;
         let failedCount = 0;
 
-        const socket = io('http://localhost:8080', {
-            transports: ['websocket']
+        const socket = io('http://localhost:8081', {
+            transports: ['websocket', 'polling'],
+            upgrade: true, // Allow upgrading from polling to websocket
+            rememberUpgrade: true,
         });
 
         const startButton = document.getElementById('startButton');
 
         socket.on('connect', () => {
-            console.log('Connected to TurboRun server');
+            console.log('✅ Connected to TurboRun server');
             document.getElementById('connectionStatus').textContent = 'Connected';
             document.getElementById('connectionStatus').className = 'connection-status connected';
 
@@ -344,8 +365,13 @@
             startButton.disabled = false;
         });
 
-        socket.on('disconnect', () => {
-            console.log('Disconnected from server');
+        socket.on('connect_error', (error) => {
+            console.error('❌ Connection error:', error);
+            document.getElementById('connectionStatus').textContent = 'Connection Error';
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('⚠️ Disconnected from server. Reason:', reason);
             document.getElementById('connectionStatus').textContent = 'Disconnected';
             document.getElementById('connectionStatus').className = 'connection-status disconnected';
 
@@ -496,4 +522,5 @@
         });
     </script>
 </body>
+
 </html>
