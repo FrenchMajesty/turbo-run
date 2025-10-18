@@ -84,8 +84,8 @@ func (wp *workerPool) worker(workerID int) {
 		case node := <-wp.pool:
 			wp.changeBusyState(workerID, true)
 
-			// Work happens in goroutine for concurrency
-			go func() {
+			// Recover from panics
+			func() {
 				defer wp.changeBusyState(workerID, false) // Mark not-busy when work completes
 
 				if r := recover(); r != nil {

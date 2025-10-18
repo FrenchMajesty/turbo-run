@@ -12,7 +12,7 @@ import (
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
 	"github.com/FrenchMajesty/turbo-run/rate_limit"
-	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/uds"
+	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/memory"
 	"github.com/FrenchMajesty/turbo-run/utils/priority_queue"
 	"github.com/google/uuid"
 	openai "github.com/openai/openai-go/v2"
@@ -91,7 +91,7 @@ func NewTurboRun(
 }
 
 // NewTurboRunWithBackend creates a new TurboRun instance with a custom rate limit backend.
-// If backend is nil, defaults to UDS backend for cross-process coordination.
+// If backend is nil, defaults to in-memory backend for cross-process coordination.
 func NewTurboRunWithBackend(
 	groq groq.GroqClientInterface,
 	openai *openai.Client,
@@ -103,9 +103,9 @@ func NewTurboRunWithBackend(
 		uniqueID := uuid.New().String()[:6]
 		fileLogger, logFile := prepareFileLogger(env, uniqueID)
 
-		// Default to UDS backend for cross-process coordination if none provided
+		// Default to in-memory backend
 		if backend == nil {
-			backend = uds.NewClient()
+			backend = memory.NewBackend()
 		}
 
 		instance = &TurboRun{
@@ -305,13 +305,14 @@ func (tr *TurboRun) listenForLaunchPad() {
 		case <-tr.launchpad:
 
 			if tr.priorityQueue.Size() == 0 {
-				return
+				continue
 			}
 
 			node, _ := tr.priorityQueue.Pop()
 
 			// Wait until we have enough budget for this request
 			blocked := false
+		budgetWaitLoop:
 			for {
 				tokensBudget, requestBudget := tr.tracker.BudgetAvailableForCycle(node.GetProvider())
 				if tokensBudget >= node.GetEstimatedTokens() && requestBudget >= 1 {
@@ -330,9 +331,16 @@ func (tr *TurboRun) listenForLaunchPad() {
 					})
 				}
 
-				// Not enough budget, wait until cycle reset
+				// Not enough budget, wait until cycle reset (but check for quit signal)
 				randomStagger := time.Duration(rand.Intn(100)) * time.Millisecond
-				time.Sleep(tr.tracker.TimeUntilReset() + randomStagger)
+				waitTime := tr.tracker.TimeUntilReset() + randomStagger
+
+				select {
+				case <-tr.quit:
+					break budgetWaitLoop
+				case <-time.After(waitTime):
+					// Continue waiting
+				}
 			}
 
 			tr.tracker.RecordConsumption(node.GetProvider(), node.GetEstimatedTokens())

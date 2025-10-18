@@ -60,7 +60,7 @@ func newWorkNode(provider groq.Provider) *WorkNode {
 	node := &WorkNode{
 		ID:              uuid.New(),
 		provider:        provider,
-		resultChan:      make(chan RunResult),
+		resultChan:      make(chan RunResult, 1),
 		statusChan:      make(chan WorkNodeStatus, 2),
 		status:          WorkNodeStatusPending,
 		mu:              sync.RWMutex{},
