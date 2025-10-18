@@ -35,7 +35,7 @@ go run main.go
 ## Core Architecture
 
 ### Singleton Pattern
-TurboRun uses a singleton pattern initialized via `NewTurboRun(groqClient, openaiClient)`. Once created, subsequent calls return the same instance. Access via `GetTurboRun()` after initialization.
+TurboRun uses a singleton pattern initialized via `NewTurboRun(groqClient, openaiClient)`. Once created, subsequent calls return the same instance. Access via `GetTurboRun()` after initialization, which returns `(*TurboRun, error)` - returns an error if the instance hasn't been initialized yet.
 
 ### Main Components
 
