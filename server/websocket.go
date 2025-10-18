@@ -99,6 +99,13 @@ func broadcastEvents() {
 			continue
 		}
 
+		// Handle special events that trigger stats updates
+		if event.Type == "worker_state_changed" {
+			BroadcastStats()
+			// Don't broadcast this internal event to clients
+			continue
+		}
+
 		// Convert event to JSON
 		eventJSON, err := json.Marshal(event)
 		if err != nil {

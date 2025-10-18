@@ -53,9 +53,10 @@ type TurboRun struct {
 	workersPool   *workerPool
 
 	// Channels
-	quit      chan struct{}
-	launchpad chan any
-	eventChan chan *Event
+	quit            chan struct{}
+	launchpad       chan any
+	eventChan       chan *Event
+	workerStateChan chan int
 
 	// Misc
 	mu         sync.RWMutex // protects launchedCount and stats reading
@@ -63,10 +64,11 @@ type TurboRun struct {
 	logFile    *os.File     // file handle for locking
 
 	// Stats attributes
-	uniqueID      string
-	startTime     time.Time
-	failedCount   int
-	launchedCount int
+	uniqueID       string
+	startTime      time.Time
+	failedCount    int
+	completedCount int
+	launchedCount  int
 }
 
 type TurboRunStats struct {
@@ -74,6 +76,7 @@ type TurboRunStats struct {
 	PriorityQueueSize int
 	LaunchpadSize     int
 	LaunchedCount     int
+	CompletedCount    int
 	FailedCount       int
 	WorkersPoolSize   int
 	WorkersPoolBusy   int
@@ -108,19 +111,23 @@ func NewTurboRunWithBackend(
 			backend = memory.NewBackend()
 		}
 
+		workerStateChan := make(chan int, 100)
+
 		instance = &TurboRun{
-			uniqueID:      uniqueID,
-			graph:         NewGraph(),
-			priorityQueue: priority_queue.NewMaxPriorityQueue[*WorkNode](),
-			tracker:       NewConsumptionTracker(backend),
-			quit:          make(chan struct{}),
-			workersPool:   NewWorkerPool(120, &groq, openai),
-			launchpad:     make(chan any, 100),
-			eventChan:     make(chan *Event, 1000),
-			fileLogger:    fileLogger,
-			logFile:       logFile,
-			startTime:     time.Now(),
+			uniqueID:        uniqueID,
+			graph:           NewGraph(),
+			priorityQueue:   priority_queue.NewMaxPriorityQueue[*WorkNode](),
+			tracker:         NewConsumptionTracker(backend),
+			quit:            make(chan struct{}),
+			launchpad:       make(chan any, 100),
+			eventChan:       make(chan *Event, 1000),
+			workerStateChan: workerStateChan,
+			fileLogger:      fileLogger,
+			logFile:         logFile,
+			startTime:       time.Now(),
 		}
+
+		instance.workersPool = NewWorkerPool(120, &groq, openai, workerStateChan)
 
 		instance.Start()
 
@@ -151,6 +158,7 @@ func (tr *TurboRun) Start() {
 	go instance.listenForReadyNodes()
 	go instance.listenForLaunchPad()
 	go instance.startMinuteTimer()
+	go instance.listenForWorkerStateChanges()
 
 	// Start analytics logging if in dev or testing environment
 	env := os.Getenv("ENV")
@@ -258,6 +266,7 @@ func (tr *TurboRun) GetStats() *TurboRunStats {
 		PriorityQueueSize: tr.priorityQueue.Size(),
 		LaunchpadSize:     len(tr.launchpad),
 		LaunchedCount:     tr.launchedCount,
+		CompletedCount:    tr.completedCount,
 		FailedCount:       tr.failedCount,
 		WorkersPoolSize:   tr.workersPool.GetWorkerCount(),
 		WorkersPoolBusy:   tr.workersPool.GetBusyWorkers(),
@@ -401,10 +410,30 @@ func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 				"duration":    result.Duration.String(),
 				"tokens_used": result.TokensUsed,
 			})
+			tr.mu.Lock()
+			tr.completedCount++
+			tr.mu.Unlock()
 		}
 
 		tr.graph.Remove(node.ID)
 	})
+}
+
+// listenForWorkerStateChanges listens for worker state changes and broadcasts stats
+func (tr *TurboRun) listenForWorkerStateChanges() {
+	for {
+		select {
+		case <-tr.quit:
+			return // Shutdown signal
+		case <-tr.workerStateChan:
+			// Worker state changed, broadcast updated stats
+			// The actual broadcasting will be handled by the server via GetStats()
+			// We just need to trigger a stats update event
+			tr.emitEvent("worker_state_changed", uuid.Nil, map[string]interface{}{
+				"workers_busy": tr.workersPool.GetBusyWorkers(),
+			})
+		}
+	}
 }
 
 // startMinuteTimer starts a timer that will call onMinuteChange every minute

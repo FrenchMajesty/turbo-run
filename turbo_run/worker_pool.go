@@ -9,26 +9,28 @@ import (
 )
 
 type workerPool struct {
-	wg          sync.WaitGroup
-	workerState map[int]bool
-	busyWorkers int
-	workerCount int
-	pool        chan *WorkNode
-	mu          sync.RWMutex
-	quit        chan struct{}
-	groq        *groq.GroqClientInterface
-	openai      *openai.Client
+	wg              sync.WaitGroup
+	workerState     map[int]bool
+	busyWorkers     int
+	workerCount     int
+	pool            chan *WorkNode
+	mu              sync.RWMutex
+	quit            chan struct{}
+	groq            *groq.GroqClientInterface
+	openai          *openai.Client
+	workerStateChan chan<- int
 }
 
-func NewWorkerPool(workersCount int, groq *groq.GroqClientInterface, openai *openai.Client) *workerPool {
+func NewWorkerPool(workersCount int, groq *groq.GroqClientInterface, openai *openai.Client, workerStateChan chan<- int) *workerPool {
 	pool := &workerPool{
-		wg:          sync.WaitGroup{},
-		workerState: make(map[int]bool, workersCount),
-		workerCount: workersCount,
-		quit:        make(chan struct{}),
-		pool:        make(chan *WorkNode, workersCount*2),
-		groq:        groq,
-		openai:      openai,
+		wg:              sync.WaitGroup{},
+		workerState:     make(map[int]bool, workersCount),
+		workerCount:     workersCount,
+		quit:            make(chan struct{}),
+		pool:            make(chan *WorkNode, workersCount*2),
+		groq:            groq,
+		openai:          openai,
+		workerStateChan: workerStateChan,
 	}
 
 	pool.start(workersCount)
@@ -137,5 +139,15 @@ func (wp *workerPool) changeBusyState(workerID int, busy bool) {
 		wp.busyWorkers++
 	} else {
 		wp.busyWorkers--
+	}
+
+	// Notify TurboRun of worker state change (non-blocking)
+	if wp.workerStateChan != nil {
+		select {
+		case wp.workerStateChan <- wp.busyWorkers:
+			// Sent successfully
+		default:
+			// Channel full, skip this update to avoid blocking workers
+		}
 	}
 }
