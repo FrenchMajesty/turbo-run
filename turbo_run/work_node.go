@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
+	"github.com/FrenchMajesty/turbo-run/utils/retry"
 	"github.com/FrenchMajesty/turbo-run/utils/token_counter"
 	"github.com/google/uuid"
 	openai "github.com/openai/openai-go/v2"
@@ -33,24 +34,6 @@ const (
 
 var tokenCounter, _ = token_counter.NewTokenCounter()
 
-// RetryConfig holds the configuration for retry logic
-type RetryConfig struct {
-	MaxRetries      int
-	BaseDelay       time.Duration
-	MaxDelay        time.Duration
-	BackoffMultiple float64
-}
-
-// DefaultRetryConfig returns a sensible default retry configuration
-func DefaultRetryConfig() RetryConfig {
-	return RetryConfig{
-		MaxRetries:      3,
-		BaseDelay:       200 * time.Millisecond,
-		MaxDelay:        5 * time.Second,
-		BackoffMultiple: 2.0,
-	}
-}
-
 type WorkNode struct {
 	ID              uuid.UUID
 	workFn          func(w *WorkNode, groq *groq.GroqClientInterface, openai *openai.Client) RunResult
@@ -58,7 +41,7 @@ type WorkNode struct {
 	estimatedTokens int
 	groqReq         groq.ChatCompletionRequest
 	openaiReq       openai.ChatCompletionNewParams
-	retryConfig     *RetryConfig
+	retryConfig     *retry.Config
 
 	// Misc
 	verboseLog bool
@@ -78,6 +61,8 @@ type RunResult struct {
 	Duration   time.Duration
 }
 
+type WorkNodeExecutableFunc func(w *WorkNode, groq *groq.GroqClientInterface, openai *openai.Client) RunResult
+
 func newWorkNode(provider Provider) *WorkNode {
 	node := &WorkNode{
 		ID:              uuid.New(),
@@ -89,6 +74,25 @@ func newWorkNode(provider Provider) *WorkNode {
 		resultCallbacks: []func(RunResult){},
 	}
 
+	return node
+}
+
+// NewWorkNodeForGroq creates a new work node for a groq request
+func NewWorkNodeForGroq(body groq.ChatCompletionRequest) *WorkNode {
+	node := newWorkNode(ProviderGroq)
+	node.groqReq = body
+	node.estimatedTokens = tokenCounter.CountRequestTokens(body)
+	node.estimatedTokens += (node.estimatedTokens * 20 / 100) // 20% overhead for response tokens
+	node.workFn = executeStandardGroqRequest
+	return node
+}
+
+// NewWorkNodeForOpenAI creates a new work node for an openai request
+func NewWorkNodeForOpenAI(body openai.ChatCompletionNewParams) *WorkNode {
+	node := newWorkNode(ProviderOpenAI)
+	node.openaiReq = body
+	bodyBytes, _ := json.Marshal(body)
+	node.estimatedTokens = tokenCounter.CountTextTokens(string(bodyBytes))
 	return node
 }
 
@@ -113,27 +117,8 @@ func (w *WorkNode) SetStatus(status WorkNodeStatus) {
 	}
 }
 
-// NewWorkNodeForGroq creates a new work node for a groq request
-func NewWorkNodeForGroq(body groq.ChatCompletionRequest) *WorkNode {
-	node := newWorkNode(ProviderGroq)
-	node.groqReq = body
-	node.estimatedTokens = tokenCounter.CountRequestTokens(body)
-	node.estimatedTokens += (node.estimatedTokens * 20 / 100) // 20% overhead for response tokens
-	node.workFn = executeStandardGroqRequest
-	return node
-}
-
-// NewWorkNodeForOpenAI creates a new work node for an openai request
-func NewWorkNodeForOpenAI(body openai.ChatCompletionNewParams) *WorkNode {
-	node := newWorkNode(ProviderOpenAI)
-	node.openaiReq = body
-	bodyBytes, _ := json.Marshal(body)
-	node.estimatedTokens = tokenCounter.CountTextTokens(string(bodyBytes))
-	return node
-}
-
 // SetWorkFn sets the work function for the work node
-func (w *WorkNode) SetWorkFn(workFn func(w *WorkNode, groq *groq.GroqClientInterface, openai *openai.Client) RunResult) *WorkNode {
+func (w *WorkNode) SetWorkFn(workFn WorkNodeExecutableFunc) *WorkNode {
 	w.workFn = workFn
 	return w
 }
@@ -190,7 +175,7 @@ func (w *WorkNode) ListenForStatus() WorkNodeStatus {
 // NewRetryableWorkNodeForOpenAI creates a new work node with retry support for OpenAI requests
 func NewRetryableWorkNodeForOpenAI(body openai.ChatCompletionNewParams) *WorkNode {
 	node := NewWorkNodeForOpenAI(body)
-	retryConfig := DefaultRetryConfig()
+	retryConfig := retry.DefaultConfig()
 	node.retryConfig = &retryConfig
 	node.verboseLog = false
 	return node
@@ -199,14 +184,14 @@ func NewRetryableWorkNodeForOpenAI(body openai.ChatCompletionNewParams) *WorkNod
 // NewRetryableWorkNodeForGroq creates a new work node with retry support for Groq requests
 func NewRetryableWorkNodeForGroq(body groq.ChatCompletionRequest) *WorkNode {
 	node := NewWorkNodeForGroq(body)
-	retryConfig := DefaultRetryConfig()
+	retryConfig := retry.DefaultConfig()
 	node.retryConfig = &retryConfig
 	node.verboseLog = false
 	return node
 }
 
 // SetRetryConfig sets the retry configuration for the work node
-func (w *WorkNode) SetRetryConfig(config RetryConfig) *WorkNode {
+func (w *WorkNode) SetRetryConfig(config retry.Config) *WorkNode {
 	w.retryConfig = &config
 	return w
 }
@@ -218,7 +203,7 @@ func (w *WorkNode) SetVerboseLog(verbose bool) *WorkNode {
 }
 
 // SetWorkFnWithRetry sets a work function with retry logic
-func (w *WorkNode) SetWorkFnWithRetry(workFn func(w *WorkNode, groq *groq.GroqClientInterface, openai *openai.Client) RunResult) *WorkNode {
+func (w *WorkNode) SetWorkFnWithRetry(workFn WorkNodeExecutableFunc) *WorkNode {
 	if w.retryConfig == nil {
 		// No retry config, use regular SetWorkFn
 		return w.SetWorkFn(workFn)
@@ -229,7 +214,7 @@ func (w *WorkNode) SetWorkFnWithRetry(workFn func(w *WorkNode, groq *groq.GroqCl
 }
 
 // wrapWithRetry wraps a work function with retry logic
-func (w *WorkNode) wrapWithRetry(workFn func(w *WorkNode, groq *groq.GroqClientInterface, openai *openai.Client) RunResult) func(w *WorkNode, groq *groq.GroqClientInterface, openai *openai.Client) RunResult {
+func (w *WorkNode) wrapWithRetry(workFn WorkNodeExecutableFunc) WorkNodeExecutableFunc {
 	return func(workNode *WorkNode, groqClient *groq.GroqClientInterface, openaiClient *openai.Client) RunResult {
 		var lastResult RunResult
 
