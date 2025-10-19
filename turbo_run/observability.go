@@ -85,23 +85,6 @@ func (tr *TurboRun) GetStats() *TurboRunStats {
 	}
 }
 
-// startAnalyticsLogger starts a timer that logs stats every 20 seconds
-func (tr *TurboRun) startAnalyticsLogger() {
-	ticker := time.NewTicker(20 * time.Second)
-	go func() {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-tr.quit:
-				tr.logStats(true)
-				return // Shutdown signal
-			case <-ticker.C:
-				tr.logStats(false)
-			}
-		}
-	}()
-}
-
 // logStats logs current stats if there's activity
 func (tr *TurboRun) logStats(shutdown bool) {
 	stats := tr.GetStats()

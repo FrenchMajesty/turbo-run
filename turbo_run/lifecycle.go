@@ -139,7 +139,7 @@ doneDrainingPushChan:
 // bootstrap starts the internal TurboRun goroutines that listen for events and dispatch them to the appropriate handlers
 func (tr *TurboRun) bootstrap() {
 	// Start core goroutines with WaitGroup tracking
-	tr.wg.Add(6)
+	tr.wg.Add(5)
 	go func() {
 		defer tr.wg.Done()
 		instance.listenForGraphReadyNodes()
@@ -159,10 +159,6 @@ func (tr *TurboRun) bootstrap() {
 	go func() {
 		defer tr.wg.Done()
 		instance.listenForWorkNodePushRequests()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.startAnalyticsLogger()
 	}()
 
 	time.Sleep(5 * time.Millisecond) // give time for the goroutines to start
