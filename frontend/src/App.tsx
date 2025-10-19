@@ -3,10 +3,12 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { Header } from './components/Header';
 import { StatsDashboard } from './components/StatsDashboard';
 import { NodesContainer } from './components/NodesContainer';
+import { GraphCanvas } from './components/GraphCanvas/GraphCanvas';
 import { EventLog } from './components/EventLog';
 import { TurboEvent } from './types/TurboEvent';
 import { Stats } from './types/Stats';
 import { NodeData } from './types/NodeData';
+import '@xyflow/react/dist/style.css';
 import './App.css';
 
 const INITIAL_STATS: Stats = {
@@ -105,6 +107,7 @@ function App() {
         <StatsDashboard stats={stats} />
 
         <div className="main-content">
+          <GraphCanvas nodes={nodes} />
           <NodesContainer nodes={nodes} />
           <EventLog events={events} />
         </div>
