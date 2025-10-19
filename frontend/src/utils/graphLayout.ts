@@ -17,9 +17,9 @@ export const getLayoutedElements = (
 
   // Configure graph layout
   dagreGraph.setGraph({
-    rankdir: 'TB', // Top to Bottom
-    nodesep: 50,   // Horizontal spacing between nodes
-    ranksep: 80,   // Vertical spacing between ranks
+    rankdir: 'LR', // Left to Right (horizontal flow)
+    nodesep: 50,   // Vertical spacing between nodes in same rank
+    ranksep: 100,  // Horizontal spacing between ranks
     marginx: 20,
     marginy: 20,
   });
@@ -37,8 +37,8 @@ export const getLayoutedElements = (
       type: 'workNode',
       data: nodeData,
       position: { x: 0, y: 0 }, // Will be set by dagre
-      sourcePosition: Position.Bottom,
-      targetPosition: Position.Top,
+      sourcePosition: Position.Right,  // For LR: arrows exit from right
+      targetPosition: Position.Left,   // For LR: arrows enter from left
     });
   });
 

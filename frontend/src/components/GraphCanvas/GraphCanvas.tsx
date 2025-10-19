@@ -30,13 +30,13 @@ const WorkNodeComponent = memo(
       <div style={{ width: '97px', height: '75px', position: 'relative' }}>
         <Handle
           type="target"
-          position={Position.Top}
+          position={Position.Left}
           style={{ opacity: 0, pointerEvents: 'none' }}
         />
         <WorkNodeCard node={data} />
         <Handle
           type="source"
-          position={Position.Bottom}
+          position={Position.Right}
           style={{ opacity: 0, pointerEvents: 'none' }}
         />
       </div>
