@@ -10,6 +10,7 @@ import { Stats } from './types/Stats';
 import { NodeData } from './types/NodeData';
 import '@xyflow/react/dist/style.css';
 import './App.css';
+import './tailwind.css';
 import { PriorityQueue } from './components/PriorityQueue/PriorityQueue';
 import { WorkerPoolGrid } from './components/WorkerPoolGrid/WorkerPoolGrid';
 
@@ -205,15 +206,20 @@ function App() {
 
         <StatsDashboard stats={stats} />
 
-        <div className="main-content">
-          <EventLog events={events} />
-          <PriorityQueue nodeIds={priorityQueueNodes} nodes={nodes} />
-          <GraphCanvas nodes={nodes} />
-          <WorkerPoolGrid
-            workerStates={workerStates}
-            nodes={nodes}
-            totalWorkers={stats.WorkersPoolSize}
-          />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-row gap-4">
+            <WorkerPoolGrid
+              workerStates={workerStates}
+              nodes={nodes}
+              totalWorkers={stats.WorkersPoolSize}
+            />
+            <PriorityQueue nodeIds={priorityQueueNodes} nodes={nodes} />
+            <GraphCanvas nodes={nodes} />
+
+          </div>
+          <div className="flex flex-row gap-4">
+            <EventLog events={events} />
+          </div>
         </div>
       </div>
     </div>
