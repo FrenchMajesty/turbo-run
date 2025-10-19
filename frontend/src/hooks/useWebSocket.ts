@@ -6,11 +6,16 @@ import { Stats } from '../types/Stats';
 interface UseWebSocketReturn {
   socket: Socket | null;
   isConnected: boolean;
+  prepareGraph: () => void;
   startProcessing: () => void;
   onTurboEvent: (callback: (event: TurboEvent) => void) => void;
   onStatsUpdate: (callback: (stats: Stats) => void) => void;
   onInitialStats: (callback: (stats: Stats) => void) => void;
+  onGraphPreparing: (callback: () => void) => void;
+  onGraphPrepared: (callback: () => void) => void;
+  onGraphCancelled: (callback: () => void) => void;
   onProcessingStarted: (callback: () => void) => void;
+  onProcessingCompleted: (callback: () => void) => void;
 }
 
 export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocketReturn => {
@@ -19,7 +24,11 @@ export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocke
   const eventCallbackRef = useRef<((event: TurboEvent) => void) | null>(null);
   const statsCallbackRef = useRef<((stats: Stats) => void) | null>(null);
   const initialStatsCallbackRef = useRef<((stats: Stats) => void) | null>(null);
+  const graphPreparingCallbackRef = useRef<(() => void) | null>(null);
+  const graphPreparedCallbackRef = useRef<(() => void) | null>(null);
+  const graphCancelledCallbackRef = useRef<(() => void) | null>(null);
   const processingStartedCallbackRef = useRef<(() => void) | null>(null);
+  const processingCompletedCallbackRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const socket = io(url, {
@@ -66,6 +75,27 @@ export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocke
       }
     });
 
+    socket.on('graph_preparing', () => {
+      console.log('Graph preparing');
+      if (graphPreparingCallbackRef.current) {
+        graphPreparingCallbackRef.current();
+      }
+    });
+
+    socket.on('graph_prepared', () => {
+      console.log('Graph prepared');
+      if (graphPreparedCallbackRef.current) {
+        graphPreparedCallbackRef.current();
+      }
+    });
+
+    socket.on('graph_cancelled', () => {
+      console.log('Graph cancelled');
+      if (graphCancelledCallbackRef.current) {
+        graphCancelledCallbackRef.current();
+      }
+    });
+
     socket.on('processing_started', () => {
       console.log('Processing started');
       if (processingStartedCallbackRef.current) {
@@ -73,10 +103,24 @@ export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocke
       }
     });
 
+    socket.on('processing_completed', () => {
+      console.log('Processing completed');
+      if (processingCompletedCallbackRef.current) {
+        processingCompletedCallbackRef.current();
+      }
+    });
+
     return () => {
       socket.disconnect();
     };
   }, [url]);
+
+  const prepareGraph = useCallback(() => {
+    if (socketRef.current && isConnected) {
+      console.log('Prepare button clicked, emitting prepare_graph event');
+      socketRef.current.emit('prepare_graph');
+    }
+  }, [isConnected]);
 
   const startProcessing = useCallback(() => {
     if (socketRef.current && isConnected) {
@@ -97,17 +141,38 @@ export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocke
     initialStatsCallbackRef.current = callback;
   }, []);
 
+  const onGraphPreparing = useCallback((callback: () => void) => {
+    graphPreparingCallbackRef.current = callback;
+  }, []);
+
+  const onGraphPrepared = useCallback((callback: () => void) => {
+    graphPreparedCallbackRef.current = callback;
+  }, []);
+
+  const onGraphCancelled = useCallback((callback: () => void) => {
+    graphCancelledCallbackRef.current = callback;
+  }, []);
+
   const onProcessingStarted = useCallback((callback: () => void) => {
     processingStartedCallbackRef.current = callback;
+  }, []);
+
+  const onProcessingCompleted = useCallback((callback: () => void) => {
+    processingCompletedCallbackRef.current = callback;
   }, []);
 
   return {
     socket: socketRef.current,
     isConnected,
+    prepareGraph,
     startProcessing,
     onTurboEvent,
     onStatsUpdate,
     onInitialStats,
+    onGraphPreparing,
+    onGraphPrepared,
+    onGraphCancelled,
     onProcessingStarted,
+    onProcessingCompleted,
   };
 };

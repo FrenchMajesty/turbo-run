@@ -58,3 +58,11 @@
 .startButton.processing {
   background: #f59e0b;
 }
+
+.startButton.preparing {
+  background: #8b5cf6;
+}
+
+.startButton.ready {
+  background: #10b981;
+}

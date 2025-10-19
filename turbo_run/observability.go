@@ -119,8 +119,14 @@ func (tr *TurboRun) logStats(shutdown bool) {
 		return
 	}
 
-	// Only log if there's activity (busy workers, items in queue, or recent launches)
-	if stats.WorkersPoolBusy > 0 || stats.PriorityQueueSize > 0 || stats.LaunchedCount > 0 {
+	// Only log if there's actual processing activity (not just queued nodes while paused)
+	// Check if paused - if paused and nothing launched yet, don't log
+	tr.mu.RLock()
+	isPaused := tr.paused
+	tr.mu.RUnlock()
+
+	// Log if: actively processing (not paused) OR workers are busy OR nodes have been launched
+	if (!isPaused && (stats.PriorityQueueSize > 0 || stats.GraphSize > 0)) || stats.WorkersPoolBusy > 0 || stats.LaunchedCount > 0 {
 		trackerStats := stats.TrackerStats
 		tr.logger.Printf("TurboRun %s: Workers(%d/%d) Queue(%d) Graph(%d) Launched(%d) Failed(%d) Tokens(groq:%s openai:%s total:%s)",
 			tr.uniqueID,

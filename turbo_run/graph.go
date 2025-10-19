@@ -129,3 +129,32 @@ func (g *Graph) GetNodesWithNoDependencies() []*WorkNode {
 
 	return entrypoints
 }
+
+// Clear removes all nodes from the graph and drains the ready channel.
+// Returns the list of all removed node IDs.
+func (g *Graph) Clear() []uuid.UUID {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+
+	// Collect all node IDs
+	removedIDs := make([]uuid.UUID, 0, len(g.nodes))
+	for nodeID := range g.nodes {
+		removedIDs = append(removedIDs, nodeID)
+	}
+
+	// Clear all maps
+	g.nodes = make(map[uuid.UUID]*WorkNode, g.size)
+	g.children = make(map[uuid.UUID][]uuid.UUID, g.size)
+	g.indegree = make(map[uuid.UUID]int, g.size)
+
+	// Drain the ready channel (non-blocking)
+	for {
+		select {
+		case <-g.readyNodesChan:
+			// Drained one item
+		default:
+			// Channel is empty
+			return removedIDs
+		}
+	}
+}

@@ -42,6 +42,7 @@ type TurboRun struct {
 	wg                      sync.WaitGroup          // tracks goroutines for graceful shutdown
 	maxGraphSize            int                     // 0 = unlimited
 	failureHandlingStrategy FailureHandlingStrategy // determines how to handle node failures
+	paused                  bool                    // when true, nodes are queued but not dispatched to workers
 
 	// Stats attributes
 	uniqueID       string
@@ -138,6 +139,7 @@ func NewTurboRun(opts Options) *TurboRun {
 			maxGraphSize:            opts.MaxGraphSize,
 			startTime:               time.Now(),
 			failureHandlingStrategy: opts.failureHandlingStrategy,
+			paused:                  true, // Start in paused state - nodes can be added but won't process until Resume() is called
 
 			// Core components
 			graph:         NewGraph(opts.MaxGraphSize),
@@ -160,8 +162,6 @@ func NewTurboRun(opts Options) *TurboRun {
 			opts.OpenAIClient,
 			workerStateChan,
 		)
-
-		instance.Start()
 	})
 
 	return instance

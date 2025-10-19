@@ -75,6 +75,61 @@ func (tr *TurboRun) Stop() {
 	tr.logger.Close()
 }
 
+// Reset cancels all in-flight work and clears the graph.
+// This should be called when you want to cancel current processing and prepare a new graph.
+func (tr *TurboRun) Reset() {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	tr.logger.Printf("TurboRun %s: Resetting - cancelling all in-flight work", tr.uniqueID)
+
+	// Clear the graph and get all removed node IDs
+	removedIDs := tr.graph.Clear()
+
+	// Drain the priority queue
+	for tr.priorityQueue.Size() > 0 {
+		tr.priorityQueue.Pop()
+	}
+
+	// Drain the launchpad channel (non-blocking)
+	for {
+		select {
+		case <-tr.launchpad:
+			// Drained one item
+		default:
+			// Channel is empty
+			goto doneDrainingLaunchpad
+		}
+	}
+doneDrainingLaunchpad:
+
+	// Drain the pushChan (non-blocking)
+	for {
+		select {
+		case <-tr.pushChan:
+			// Drained one item
+		default:
+			// Channel is empty
+			goto doneDrainingPushChan
+		}
+	}
+doneDrainingPushChan:
+
+	// Reset counters
+	tr.launchedCount = 0
+	tr.completedCount = 0
+	tr.failedCount = 0
+
+	// Emit cancellation events for all removed nodes
+	for _, nodeID := range removedIDs {
+		tr.emitEvent(EventNodeCancelled, nodeID, map[string]any{
+			"reason": "reset",
+		})
+	}
+
+	tr.logger.Printf("TurboRun %s: Reset complete - cancelled %d nodes", tr.uniqueID, len(removedIDs))
+}
+
 // listenForGraphReadyNodes listens for ready nodes published from the Graph and pushes them into the priority queue
 func (tr *TurboRun) listenForGraphReadyNodes() {
 	for {
@@ -105,6 +160,43 @@ func (tr *TurboRun) listenForGraphReadyNodes() {
 	}
 }
 
+// Pause pauses the processing of nodes (they will be queued but not dispatched to workers)
+func (tr *TurboRun) Pause() {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	tr.paused = true
+	tr.logger.Printf("TurboRun %s: Paused", tr.uniqueID)
+}
+
+// Resume resumes the processing of nodes
+func (tr *TurboRun) Resume() {
+	tr.mu.Lock()
+	wasPaused := tr.paused
+	tr.paused = false
+	queueSize := tr.priorityQueue.Size()
+	tr.mu.Unlock()
+
+	if wasPaused {
+		tr.logger.Printf("TurboRun %s: Resumed with %d nodes in queue", tr.uniqueID, queueSize)
+
+		// Signal the launchpad for each queued node to start processing
+		for i := 0; i < queueSize; i++ {
+			select {
+			case tr.launchpad <- struct{}{}:
+			default:
+				// Launchpad full, nodes will be processed eventually
+			}
+		}
+	}
+}
+
+// IsPaused returns whether TurboRun is currently paused
+func (tr *TurboRun) IsPaused() bool {
+	tr.mu.RLock()
+	defer tr.mu.RUnlock()
+	return tr.paused
+}
+
 // listenForLaunchPad reads the value being put on the launchpad and sends them off to the workers pool
 func (tr *TurboRun) listenForLaunchPad() {
 	for {
@@ -112,6 +204,15 @@ func (tr *TurboRun) listenForLaunchPad() {
 		case <-tr.quit:
 			return // Shutdown signal
 		case <-tr.launchpad:
+			// Check if paused - if so, skip processing this signal
+			tr.mu.RLock()
+			isPaused := tr.paused
+			tr.mu.RUnlock()
+
+			if isPaused {
+				// Paused - don't process, signal will be lost but Resume() will re-signal
+				continue
+			}
 
 			if tr.priorityQueue.Size() == 0 {
 				continue

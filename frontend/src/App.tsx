@@ -25,15 +25,22 @@ function App() {
   const [nodes, setNodes] = useState<Map<string, NodeData>>(new Map());
   const [events, setEvents] = useState<TurboEvent[]>([]);
   const [stats, setStats] = useState<Stats>(INITIAL_STATS);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isGraphPrepared, setIsGraphPrepared] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const {
     isConnected,
+    prepareGraph,
     startProcessing,
     onTurboEvent,
     onStatsUpdate,
     onInitialStats,
+    onGraphPreparing,
+    onGraphPrepared,
+    onGraphCancelled,
     onProcessingStarted,
+    onProcessingCompleted,
   } = useWebSocket();
 
   useEffect(() => {
@@ -51,10 +58,34 @@ function App() {
       setStats(newStats);
     });
 
+    onGraphPreparing(() => {
+      setIsPreparing(true);
+      setIsGraphPrepared(false);
+    });
+
+    onGraphPrepared(() => {
+      setIsPreparing(false);
+      setIsGraphPrepared(true);
+    });
+
+    onGraphCancelled(() => {
+      setIsPreparing(false);
+      setIsGraphPrepared(false);
+      setIsProcessing(false);
+      // Clear nodes and events when graph is cancelled
+      setNodes(new Map());
+      setEvents([]);
+    });
+
     onProcessingStarted(() => {
       setIsProcessing(true);
     });
-  }, [onTurboEvent, onStatsUpdate, onInitialStats, onProcessingStarted]);
+
+    onProcessingCompleted(() => {
+      setIsProcessing(false);
+      setIsGraphPrepared(false);
+    });
+  }, [onTurboEvent, onStatsUpdate, onInitialStats, onGraphPreparing, onGraphPrepared, onGraphCancelled, onProcessingStarted, onProcessingCompleted]);
 
   const handleEvent = (event: TurboEvent) => {
     const nodeId = event.node_id;
@@ -91,6 +122,10 @@ function App() {
     });
   };
 
+  const handlePrepareClick = () => {
+    prepareGraph();
+  };
+
   const handleStartClick = () => {
     startProcessing();
   };
@@ -100,7 +135,10 @@ function App() {
       <div className="container">
         <Header
           isConnected={isConnected}
+          isPreparing={isPreparing}
+          isGraphPrepared={isGraphPrepared}
           isProcessing={isProcessing}
+          onPrepareClick={handlePrepareClick}
           onStartClick={handleStartClick}
         />
 

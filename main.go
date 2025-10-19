@@ -75,13 +75,16 @@ func main() {
 	// Initialize mock clients
 	mockGroq := &MockGroqClient{}
 
-	// Initialize TurboRun
+	// Initialize TurboRun (starts in paused state)
 	turboRun := turbo_run.NewTurboRun(turbo_run.Options{
 		GroqClient: mockGroq,
 	})
 
 	// Override budgets for demo (allow unlimited requests)
 	turboRun.OverrideBudgetsForTests(1000000, 1000000, 10000, 10000)
+
+	// Start TurboRun goroutines (remains paused until Resume() is called)
+	turboRun.Start()
 
 	// Create Fiber app
 	app := fiber.New()

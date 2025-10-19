@@ -17,7 +17,9 @@ var (
 	turboRun          *turbo_run.TurboRun
 	workloadGenerator func(*turbo_run.TurboRun)
 	isProcessing      bool
+	isGraphPrepared   bool
 	mutex             sync.RWMutex
+	stopMonitoring    chan struct{}
 )
 
 // Initialize sets up the package-level variables
@@ -25,6 +27,8 @@ func Initialize(tr *turbo_run.TurboRun, workloadGen func(*turbo_run.TurboRun)) {
 	turboRun = tr
 	workloadGenerator = workloadGen
 	isProcessing = false
+	isGraphPrepared = false
+	stopMonitoring = make(chan struct{})
 }
 
 // initEventListeners initializes the Socket.IO event handlers
@@ -38,6 +42,12 @@ func initEventListeners(io *socketio.Io) {
 		stats := turboRun.GetStats()
 		statsJSON, _ := json.Marshal(stats)
 		socket.Emit("initial_stats", string(statsJSON))
+
+		// Handle prepare_graph event from client
+		socket.On("prepare_graph", func(ep *socketio.EventPayload) {
+			log.Println("Received prepare_graph request from client")
+			PrepareGraph()
+		})
 
 		// Handle start_processing event from client
 		socket.On("start_processing", func(ep *socketio.EventPayload) {
@@ -54,14 +64,106 @@ func initEventListeners(io *socketio.Io) {
 	log.Printf("Socket.IO server initialized in %s", time.Since(now))
 }
 
-// StartProcessing triggers the workload generation if not already processing
+// PrepareGraph prepares the graph by calling the workload generator.
+// If already processing, it will cancel the current processing first.
+func PrepareGraph() {
+	mutex.Lock()
+
+	// If already processing, cancel it first
+	if isProcessing {
+		mutex.Unlock()
+		log.Println("Cancelling current processing before preparing new graph...")
+
+		if turboRun != nil {
+			turboRun.Reset()
+		}
+
+		// Stop the monitoring goroutine
+		select {
+		case stopMonitoring <- struct{}{}:
+		default:
+		}
+
+		mutex.Lock()
+		isProcessing = false
+		isGraphPrepared = false
+
+		// Notify clients that processing was cancelled
+		if io != nil {
+			io.Emit("graph_cancelled", "")
+		}
+	}
+
+	mutex.Unlock()
+
+	log.Println("Preparing graph...")
+
+	// Notify clients that graph preparation has started
+	if io != nil {
+		io.Emit("graph_preparing", "")
+	}
+
+	// Run workload generation in goroutine
+	// TurboRun is paused by default, so nodes will be queued but not processed
+	go func() {
+		if workloadGenerator != nil && turboRun != nil {
+			// Ensure TurboRun is paused before adding nodes
+			turboRun.Pause()
+
+			// Start periodic stats broadcasting during graph preparation
+			statsTicker := time.NewTicker(200 * time.Millisecond)
+			stopStats := make(chan struct{})
+			go func() {
+				for {
+					select {
+					case <-statsTicker.C:
+						BroadcastStats()
+					case <-stopStats:
+						statsTicker.Stop()
+						return
+					}
+				}
+			}()
+
+			// Generate the workload (adds nodes to graph)
+			workloadGenerator(turboRun)
+
+			// Stop stats broadcasting
+			close(stopStats)
+
+			mutex.Lock()
+			isGraphPrepared = true
+			mutex.Unlock()
+
+			log.Println("Graph prepared successfully (nodes queued, waiting for start)")
+
+			// Broadcast final stats
+			BroadcastStats()
+
+			// Notify clients that graph is prepared
+			if io != nil {
+				io.Emit("graph_prepared", "")
+			}
+		}
+	}()
+}
+
+// StartProcessing resumes TurboRun to start processing the prepared graph
 func StartProcessing() {
 	mutex.Lock()
+
+	if !isGraphPrepared {
+		mutex.Unlock()
+		log.Println("Cannot start processing - graph not prepared")
+		return
+	}
+
 	if isProcessing {
 		mutex.Unlock()
 		log.Println("Already processing, ignoring start request")
 		return
 	}
+
 	isProcessing = true
 	mutex.Unlock()
 
@@ -72,12 +174,13 @@ func StartProcessing() {
 		io.Emit("processing_started", "")
 	}
 
-	// Run workload generation in goroutine
-	go func() {
-		if workloadGenerator != nil && turboRun != nil {
-			workloadGenerator(turboRun)
-		}
-	}()
+	// Resume TurboRun to start processing the queued nodes
+	if turboRun != nil {
+		turboRun.Resume()
+	}
+
+	// Start monitoring for completion
+	go monitorProcessingCompletion()
 }
 
 // Start begins broadcasting TurboRun events to all connected clients
@@ -144,4 +247,53 @@ func BroadcastStats() {
 	}
 
 	io.Emit("stats_update", string(statsJSON))
+}
+
+// monitorProcessingCompletion monitors the graph for completion and notifies clients
+func monitorProcessingCompletion() {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	log.Println("Started monitoring for processing completion...")
+
+	for {
+		select {
+		case <-stopMonitoring:
+			log.Println("Stopped monitoring for processing completion")
+			return
+
+		case <-ticker.C:
+			if turboRun == nil {
+				continue
+			}
+
+			stats := turboRun.GetStats()
+
+			// Processing is complete when:
+			// - Graph is empty (all nodes processed)
+			// - Priority queue is empty (no nodes waiting)
+			// - No workers are busy
+			// - At least one node was launched (to avoid false positives on empty graphs)
+			if stats.GraphSize == 0 &&
+				stats.PriorityQueueSize == 0 &&
+				stats.WorkersPoolBusy == 0 &&
+				stats.LaunchedCount > 0 {
+
+				log.Printf("Processing completed! Launched: %d, Completed: %d, Failed: %d",
+					stats.LaunchedCount, stats.CompletedCount, stats.FailedCount)
+
+				mutex.Lock()
+				isProcessing = false
+				isGraphPrepared = false
+				mutex.Unlock()
+
+				// Notify clients that processing is complete
+				if io != nil {
+					io.Emit("processing_completed", "")
+				}
+
+				return
+			}
+		}
+	}
 }
