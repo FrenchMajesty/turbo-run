@@ -116,6 +116,17 @@ function App() {
 
       return newNodes;
     });
+
+    // Auto-remove completed nodes after 3 seconds
+    if (type === 'node_completed') {
+      setTimeout(() => {
+        setNodes((prevNodes) => {
+          const newNodes = new Map(prevNodes);
+          newNodes.delete(nodeId);
+          return newNodes;
+        });
+      }, 3000);
+    }
   };
 
   const addEventToLog = (event: TurboEvent) => {
