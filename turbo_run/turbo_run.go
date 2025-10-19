@@ -52,7 +52,7 @@ type TurboRun struct {
 
 	// Channels
 	quit            chan struct{}
-	launchpad       chan any
+	launchpad       chan struct{}
 	eventChan       chan *Event
 	workerStateChan chan int
 
@@ -126,7 +126,7 @@ func NewTurboRunWithBackend(
 			priorityQueue:   priority_queue.NewMaxPriorityQueue[*WorkNode](),
 			tracker:         NewConsumptionTracker(backend),
 			quit:            make(chan struct{}),
-			launchpad:       make(chan any, 100),
+			launchpad:       make(chan struct{}, 100),
 			eventChan:       make(chan *Event, 1000),
 			workerStateChan: workerStateChan,
 			logger:          logger.NewStdoutLogger(), // Default to stdout
@@ -320,7 +320,7 @@ func (tr *TurboRun) listenForReadyNodes() {
 
 			// Wait for the PQ to get re-organized
 			time.Sleep(5 * time.Millisecond)
-			tr.launchpad <- node
+			tr.launchpad <- struct{}{}
 		}
 	}
 }
