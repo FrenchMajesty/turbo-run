@@ -61,9 +61,18 @@ func TestTurboRun_Singleton(t *testing.T) {
 	mockOpenAI := &openai.Client{}
 
 	// Create multiple instances - should all be the same
-	tr1 := NewTurboRun(mockGroq, mockOpenAI)
-	tr2 := NewTurboRun(mockGroq, mockOpenAI)
-	tr3 := NewTurboRun(mockGroq, mockOpenAI)
+	tr1 := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
+	tr2 := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
+	tr3 := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 
 	assert.Equal(t, tr1, tr2, "Should return same instance")
 	assert.Equal(t, tr2, tr3, "Should return same instance")
@@ -88,7 +97,10 @@ func TestTurboRun_BufferStateProgression(t *testing.T) {
 		time.Sleep(200 * time.Millisecond) // Slow to keep nodes in buffers
 	})
 
-	tr := NewTurboRun(mockGroq, mockOpenAI)
+	tr := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 	defer tr.Stop()
 
 	// Verify initial state
@@ -154,7 +166,10 @@ func TestTurboRun_BudgetEnforcementDirectly(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	})
 
-	tr := NewTurboRun(mockGroq, mockOpenAI)
+	tr := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 	defer tr.Stop()
 
 	// Check initial budget state
@@ -244,7 +259,10 @@ func TestTurboRun_NodeLifecycleStates(t *testing.T) {
 		time.Sleep(50 * time.Millisecond) // Small delay to ensure state transitions
 	})
 
-	tr := NewTurboRun(mockGroq, mockOpenAI)
+	tr := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 	defer tr.Stop()
 
 	// Create and process nodes
@@ -358,7 +376,10 @@ func TestTurboRun_WorkerPoolUtilization(t *testing.T) {
 		time.Sleep(80 * time.Millisecond) // Moderate processing time
 	})
 
-	tr := NewTurboRun(mockGroq, mockOpenAI)
+	tr := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 	defer tr.Stop()
 
 	// Monitor worker utilization in background
@@ -442,7 +463,10 @@ func TestTurboRun_BufferOverflowHandling(t *testing.T) {
 		time.Sleep(500 * time.Millisecond) // Very slow processing
 	})
 
-	tr := NewTurboRun(mockGroq, mockOpenAI)
+	tr := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 	defer tr.Stop()
 
 	// Push more nodes than launchpad buffer capacity (100)
@@ -529,7 +553,10 @@ func TestTurboRun_NoNodeDropping(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 	})
 
-	tr := NewTurboRun(mockGroq, mockOpenAI)
+	tr := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 	defer tr.Stop()
 
 	// Create unique identifiable nodes
@@ -632,7 +659,10 @@ func TestTurboRun_SlowProcessingShowsWorkerUtilization(t *testing.T) {
 		t.Logf("✅ Mock completed for node %d", count)
 	})
 
-	tr := NewTurboRun(mockGroq, mockOpenAI)
+	tr := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 	defer tr.Stop()
 
 	// Monitor stats continuously in background
@@ -779,7 +809,10 @@ func TestTurboRun_BudgetExhaustionBlocking(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	})
 
-	tr := NewTurboRun(mockGroq, mockOpenAI)
+	tr := NewTurboRun(Options{
+		GroqClient:   mockGroq,
+		OpenAIClient: mockOpenAI,
+	})
 	defer func() {
 		// Restore original limits after test (critical for singleton)
 		tr.OverrideBudgetsForTests(originalGroqTokens, originalOpenAITokens, originalGroqRequests, originalOpenAIRequests)

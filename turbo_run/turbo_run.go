@@ -2,7 +2,7 @@ package turbo_run
 
 import (
 	"fmt"
-	"os"
+	"math"
 	"sync"
 	"time"
 
@@ -68,90 +68,82 @@ var (
 	once     sync.Once
 )
 
-// TurboRunOption is a functional option for configuring TurboRun
-type TurboRunOption func(*TurboRun)
+// Options contains configuration options for TurboRun
+type Options struct {
+	// GroqClient is the Groq API client (required)
+	GroqClient groq.GroqClientInterface
 
-// WithLogger sets a custom logger for TurboRun
-func WithLogger(l logger.Logger) TurboRunOption {
-	return func(tr *TurboRun) {
-		tr.logger = l
-	}
-}
+	// OpenAIClient is the OpenAI API client (required)
+	OpenAIClient *openai.Client
 
-// WithMaxGraphSize sets the maximum number of nodes allowed in the graph.
-// When the graph is full, Push() will block until nodes complete.
-// A value of 0 means unlimited (default).
-func WithMaxGraphSize(size int) TurboRunOption {
-	return func(tr *TurboRun) {
-		tr.maxGraphSize = size
-	}
+	// Backend is the rate limit backend for cross-process coordination
+	// If nil, defaults to in-memory backend
+	Backend rate_limit.Backend
+
+	// Logger is the logger instance to use
+	// If nil, defaults to stdout logger
+	Logger logger.Logger
+
+	// MaxGraphSize limits the number of nodes allowed in the graph to prevent unbounded memory usage. 0 = unlimited. Default is 500K
+	MaxGraphSize int
+
+	// WorkerPoolSize is the number of workers to use in the worker pool
+	WorkerPoolSize int
 }
 
 // NewTurboRun creates a new singleton instance of TurboRun.
 // Subsequent calls return the same instance.
-func NewTurboRun(
-	groqClient groq.GroqClientInterface,
-	openaiClient *openai.Client,
-	opts ...TurboRunOption,
-) *TurboRun {
-	return NewTurboRunWithBackend(groqClient, openaiClient, nil, opts...)
-}
-
-// NewTurboRunWithBackend creates a new TurboRun instance with a custom rate limit backend.
-// If backend is nil, defaults to in-memory backend for cross-process coordination.
-func NewTurboRunWithBackend(
-	groqClient groq.GroqClientInterface,
-	openaiClient *openai.Client,
-	backend rate_limit.Backend,
-	opts ...TurboRunOption,
-) *TurboRun {
+func NewTurboRun(opts Options) *TurboRun {
 	once.Do(func() {
-		env := os.Getenv("ENV")
 		uniqueID := uuid.New().String()[:6]
 
-		// Default to in-memory backend
-		if backend == nil {
-			backend = memory.NewBackend()
+		// Apply defaults
+		if opts.Backend == nil {
+			opts.Backend = memory.NewBackend()
 		}
+
+		if opts.Logger == nil {
+			opts.Logger = logger.NewStdoutLogger()
+		}
+
+		if opts.MaxGraphSize <= 0 {
+			opts.MaxGraphSize = 500_000 // Default max graph size
+		}
+
+		if opts.WorkerPoolSize <= 0 {
+			opts.WorkerPoolSize = 120
+		}
+		pushBufferSize := opts.MaxGraphSize
+		if pushBufferSize == 0 {
+			pushBufferSize = 1000 // Default buffer for unlimited graphs
+		}
+
+		eventChannelSize := int(math.Max(1000, float64(opts.WorkerPoolSize*10))) // 1K or 10 times the worker pool size, whichever is greater
 
 		instance = &TurboRun{
 			uniqueID:         uniqueID,
 			graph:            NewGraph(),
 			priorityQueue:    priority_queue.NewMaxPriorityQueue[*WorkNode](),
-			tracker:          NewConsumptionTracker(backend),
+			tracker:          NewConsumptionTracker(opts.Backend),
 			quit:             make(chan struct{}),
-			launchpad:        make(chan struct{}, 100),
-			eventChan:        make(chan *Event, 1000),
-			workerStateChan:  make(chan int, 100),
-			graphSpaceNotify: make(chan struct{}, 1),   // Buffered to prevent blocking
-			logger:           logger.NewStdoutLogger(), // Default to stdout
-			maxGraphSize:     0,                        // Default unlimited
+			launchpad:        make(chan struct{}, opts.WorkerPoolSize), // Makes nodes available to the worker pool
+			eventChan:        make(chan *Event, eventChannelSize),      // ~10 events per node, channel is pass-through for observability
+			workerStateChan:  make(chan int, opts.WorkerPoolSize*2),    // 2 events per worker (busy/idle), channel is pass-through for state
+			graphSpaceNotify: make(chan struct{}, 1),                   // Buffered to prevent blocking
+			pushChan:         make(chan *pushRequest, pushBufferSize),
+			logger:           opts.Logger,
+			maxGraphSize:     opts.MaxGraphSize,
 			startTime:        time.Now(),
 		}
 
-		// Apply functional options (may set maxGraphSize)
-		for _, opt := range opts {
-			opt(instance)
-		}
-
-		// Calculate push channel buffer size
-		// Use maxGraphSize as buffer, or default to 1000 if unlimited
-		pushBufferSize := instance.maxGraphSize
-		if pushBufferSize == 0 {
-			pushBufferSize = 1000 // Default buffer for unlimited graphs
-		}
-		instance.pushChan = make(chan *pushRequest, pushBufferSize)
-
-		instance.workersPool = NewWorkerPool(120, &groqClient, openaiClient, instance.workerStateChan)
+		instance.workersPool = NewWorkerPool(
+			opts.WorkerPoolSize,
+			&opts.GroqClient,
+			opts.OpenAIClient,
+			instance.workerStateChan,
+		)
 
 		instance.Start()
-
-		// Log initial startup
-		if env == "dev" || env == "testing" {
-			instance.logger.Printf("TurboRun %s: Started with %d workers", instance.uniqueID, 120)
-		} else {
-			instance.logger.Printf("TurboRun %s: Started with %d workers (env=%s)", instance.uniqueID, 120, env)
-		}
 	})
 
 	return instance
@@ -181,7 +173,7 @@ func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 
 	// Small sleep to allow async processing to complete
 	// This maintains quasi-synchronous behavior for tests
-	time.Sleep(5 * time.Nanosecond)
+	time.Sleep(time.Millisecond)
 
 	return tr
 }
@@ -201,7 +193,7 @@ func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid
 
 	// Small sleep to allow async processing to complete
 	// This maintains quasi-synchronous behavior for tests
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(time.Millisecond)
 
 	return tr
 }

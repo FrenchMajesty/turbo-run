@@ -2,7 +2,6 @@ package turbo_run
 
 import (
 	"math/rand"
-	"os"
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/utils/priority_queue"
@@ -12,10 +11,10 @@ import (
 // Start starts the turbo runner
 func (tr *TurboRun) Start() {
 	// Start core goroutines with WaitGroup tracking
-	tr.wg.Add(5)
+	tr.wg.Add(6)
 	go func() {
 		defer tr.wg.Done()
-		instance.listenForReadyNodes()
+		instance.listenForGraphReadyNodes()
 	}()
 	go func() {
 		defer tr.wg.Done()
@@ -31,20 +30,15 @@ func (tr *TurboRun) Start() {
 	}()
 	go func() {
 		defer tr.wg.Done()
-		instance.listenForPushRequests()
+		instance.listenForWorkNodePushRequests()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.startAnalyticsLogger()
 	}()
 
-	// Start analytics logging if in dev or testing environment
-	env := os.Getenv("ENV")
-	if env == "dev" || env == "testing" {
-		tr.wg.Add(1)
-		go func() {
-			defer tr.wg.Done()
-			instance.startAnalyticsLogger()
-		}()
-	}
-
 	time.Sleep(10 * time.Millisecond) // give time for the goroutines to start
+	tr.logger.Printf("TurboRun %s: Started with %d workers", tr.uniqueID, tr.workersPool.GetWorkerCount())
 }
 
 // Stop stops the turbo runner gracefully
@@ -68,8 +62,8 @@ func (tr *TurboRun) Stop() {
 	tr.logger.Close()
 }
 
-// listenForReadyNodes listens for ready nodes published from the Graph and pushes them into the priority queue
-func (tr *TurboRun) listenForReadyNodes() {
+// listenForGraphReadyNodes listens for ready nodes published from the Graph and pushes them into the priority queue
+func (tr *TurboRun) listenForGraphReadyNodes() {
 	for {
 		select {
 		case <-tr.quit:
@@ -179,6 +173,7 @@ func (tr *TurboRun) listenForLaunchPad() {
 			tr.workersPool.Dispatch(node)
 			tr.removeNodeFromGraphOnCompletion(node)
 
+			// Increment launched count
 			tr.mu.Lock()
 			tr.launchedCount++
 			tr.mu.Unlock()
@@ -241,9 +236,9 @@ func (tr *TurboRun) listenForWorkerStateChanges() {
 	}
 }
 
-// listenForPushRequests processes incoming push requests and adds nodes to the graph
+// listenForWorkNodePushRequests processes incoming push requests and adds nodes to the graph
 // with backpressure control based on maxGraphSize
-func (tr *TurboRun) listenForPushRequests() {
+func (tr *TurboRun) listenForWorkNodePushRequests() {
 	var blocked bool
 
 	for {

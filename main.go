@@ -76,7 +76,9 @@ func main() {
 	mockGroq := &MockGroqClient{}
 
 	// Initialize TurboRun
-	turboRun := turbo_run.NewTurboRun(mockGroq, nil)
+	turboRun := turbo_run.NewTurboRun(turbo_run.Options{
+		GroqClient: mockGroq,
+	})
 
 	// Override budgets for demo (allow unlimited requests)
 	turboRun.OverrideBudgetsForTests(1000000, 1000000, 10000, 10000)
