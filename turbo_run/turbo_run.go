@@ -15,8 +15,8 @@ import (
 	openai "github.com/openai/openai-go/v2"
 )
 
-// pushRequest represents a request to add a node to the graph
-type pushRequest struct {
+// pushToGraphRequest represents a request to add a node to the graph
+type pushToGraphRequest struct {
 	node         *WorkNode
 	dependencies []uuid.UUID
 }
@@ -27,19 +27,19 @@ type TurboRun struct {
 	priorityQueue *priority_queue.PriorityQueue[*WorkNode]
 	tracker       *consumptionTracker
 	workersPool   *workerPool
+	logger        logger.Logger
 
 	// Channels
-	quit             chan struct{}
-	launchpad        chan struct{}
-	eventChan        chan *Event
-	workerStateChan  chan int
-	pushChan         chan *pushRequest // buffered channel for incoming graph nodes
-	graphSpaceNotify chan struct{}     // signals when graph space becomes available
+	quit             chan struct{}            // signals shutdown
+	launchpad        chan struct{}            // signals that a node is ready to launch
+	graphSpaceNotify chan struct{}            // signals when graph space becomes available
+	eventChan        chan *Event              // buffered channel for observability events
+	workerStateChan  chan int                 // counts the number of busy workers
+	pushChan         chan *pushToGraphRequest // buffered channel for incoming graph nodes
 
 	// Misc
 	mu           sync.RWMutex   // protects launchedCount and stats reading
 	wg           sync.WaitGroup // tracks goroutines for graceful shutdown
-	logger       logger.Logger  // pluggable logger
 	maxGraphSize int            // 0 = unlimited
 
 	// Stats attributes
@@ -87,7 +87,7 @@ type Options struct {
 	// MaxGraphSize limits the number of nodes allowed in the graph to prevent unbounded memory usage. 0 = unlimited. Default is 500K
 	MaxGraphSize int
 
-	// WorkerPoolSize is the number of workers to use in the worker pool
+	// WorkerPoolSize is the number of workers to use in the worker pool. Default is 120.
 	WorkerPoolSize int
 }
 
@@ -124,19 +124,24 @@ func NewTurboRun(opts Options) *TurboRun {
 		workerStateChan := make(chan int, opts.WorkerPoolSize*2)                 // 2 events per worker (busy/idle), channel is pass-through for state
 
 		instance = &TurboRun{
-			uniqueID:         uniqueID,
-			graph:            NewGraph(opts.MaxGraphSize),
-			priorityQueue:    priority_queue.NewMaxPriorityQueue[*WorkNode](),
-			tracker:          NewConsumptionTracker(opts.Backend),
+			// Attributes
+			uniqueID:     uniqueID,
+			maxGraphSize: opts.MaxGraphSize,
+			startTime:    time.Now(),
+
+			// Core components
+			graph:         NewGraph(opts.MaxGraphSize),
+			priorityQueue: priority_queue.NewMaxPriorityQueue[*WorkNode](),
+			tracker:       NewConsumptionTracker(opts.Backend),
+			logger:        opts.Logger,
+
+			// Channels
 			quit:             make(chan struct{}),
-			launchpad:        make(chan struct{}, opts.WorkerPoolSize), // Makes nodes available to the worker pool
-			eventChan:        make(chan *Event, eventChannelSize),      // ~10 events per node, channel is pass-through for observability
+			launchpad:        make(chan struct{}, opts.WorkerPoolSize),
+			eventChan:        make(chan *Event, eventChannelSize),
 			workerStateChan:  workerStateChan,
 			graphSpaceNotify: make(chan struct{}, 1), // Buffered to prevent blocking
-			pushChan:         make(chan *pushRequest, pushBufferSize),
-			logger:           opts.Logger,
-			maxGraphSize:     opts.MaxGraphSize,
-			startTime:        time.Now(),
+			pushChan:         make(chan *pushToGraphRequest, pushBufferSize),
 		}
 
 		instance.workersPool = NewWorkerPool(
@@ -169,7 +174,7 @@ func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 	}
 
 	// Send to push channel (blocks if channel is full)
-	tr.pushChan <- &pushRequest{
+	tr.pushChan <- &pushToGraphRequest{
 		node:         workNode,
 		dependencies: []uuid.UUID{},
 	}
@@ -189,7 +194,7 @@ func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid
 	}
 
 	// Send to push channel (blocks if channel is full)
-	tr.pushChan <- &pushRequest{
+	tr.pushChan <- &pushToGraphRequest{
 		node:         workNode,
 		dependencies: dependencies,
 	}
