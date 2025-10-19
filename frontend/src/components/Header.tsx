@@ -1,23 +1,11 @@
 import React from 'react';
+import { useWebSocketStore } from '../stores/useWebSocketStore';
+import { useUIStore } from '../stores/useUIStore';
 import styles from '../styles/Header.module.css';
 
-interface HeaderProps {
-  isConnected: boolean;
-  isPreparing: boolean;
-  isGraphPrepared: boolean;
-  isProcessing: boolean;
-  onPrepareClick: () => void;
-  onStartClick: () => void;
-}
-
-export const Header: React.FC<HeaderProps> = ({
-  isConnected,
-  isPreparing,
-  isGraphPrepared,
-  isProcessing,
-  onPrepareClick,
-  onStartClick
-}) => {
+export const Header: React.FC = () => {
+  const { isConnected, prepareGraph, startProcessing } = useWebSocketStore();
+  const { isPreparing, isGraphPrepared, isProcessing } = useUIStore();
   const getPrepareButtonText = () => {
     if (isPreparing) return 'Preparing...';
     return 'Prepare Graph';
@@ -50,14 +38,14 @@ export const Header: React.FC<HeaderProps> = ({
       </span>
       <button
         className={getPrepareButtonClass()}
-        onClick={onPrepareClick}
+        onClick={prepareGraph}
         disabled={!isConnected || isPreparing || isProcessing}
       >
         {getPrepareButtonText()}
       </button>
       <button
         className={getStartButtonClass()}
-        onClick={onStartClick}
+        onClick={startProcessing}
         disabled={!isConnected || !isGraphPrepared || isProcessing}
       >
         {getStartButtonText()}

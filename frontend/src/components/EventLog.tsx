@@ -1,12 +1,10 @@
 import React from 'react';
-import { TurboEvent } from '../types/TurboEvent';
+import { useEventsStore } from '../stores/useEventsStore';
 import styles from '../styles/EventLog.module.css';
 
-interface EventLogProps {
-  events: TurboEvent[];
-}
+export const EventLog: React.FC = () => {
+  const events = useEventsStore((state) => state.events);
 
-export const EventLog: React.FC<EventLogProps> = ({ events }) => {
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString();
   };

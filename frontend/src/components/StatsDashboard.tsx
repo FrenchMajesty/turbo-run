@@ -1,13 +1,11 @@
 import React from 'react';
 import { StatCard } from './StatCard';
-import { Stats } from '../types/Stats';
+import { useStatsStore } from '../stores/useStatsStore';
 import styles from '../styles/Stats.module.css';
 
-interface StatsDashboardProps {
-  stats: Stats;
-}
+export const StatsDashboard: React.FC = () => {
+  const stats = useStatsStore((state) => state.stats);
 
-export const StatsDashboard: React.FC<StatsDashboardProps> = ({ stats }) => {
   return (
     <div className={styles.statsDashboard}>
       <StatCard title="Graph Size" value={stats.GraphSize} />
