@@ -130,7 +130,7 @@ func (tr *TurboRun) listenForLaunchPad() {
 				}
 
 				// Not enough budget, wait until cycle reset (but check for quit signal)
-				randomStagger := time.Duration(rand.Intn(100)) * time.Millisecond
+				randomStagger := time.Duration(rand.Intn(1000)) * time.Microsecond
 				waitTime := tr.tracker.TimeUntilReset() + randomStagger
 
 				select {
