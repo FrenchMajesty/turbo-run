@@ -21,37 +21,43 @@ const (
 	FailureStrategyIsolate FailureHandlingStrategy = "isolate"
 )
 
-// Start starts the turbo runner
+// Start begins processing nodes in the Graph. Used for first time or to resume processing if paused.
 func (tr *TurboRun) Start() {
-	// Start core goroutines with WaitGroup tracking
-	tr.wg.Add(6)
-	go func() {
-		defer tr.wg.Done()
-		instance.listenForGraphReadyNodes()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.listenForLaunchPad()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.startMinuteTimer()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.listenForWorkerStateChanges()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.listenForWorkNodePushRequests()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.startAnalyticsLogger()
-	}()
+	tr.mu.Lock()
+	wasPaused := tr.paused
+	tr.paused = false
+	queueSize := tr.priorityQueue.Size()
+	tr.mu.Unlock()
 
-	time.Sleep(5 * time.Millisecond) // give time for the goroutines to start
-	tr.logger.Printf("TurboRun %s: Started with %d workers", tr.uniqueID, tr.workersPool.GetWorkerCount())
+	if wasPaused {
+		tr.logger.Printf("TurboRun %s: Started/Resumed with %d nodes in queue", tr.uniqueID, queueSize)
+
+		// Signal the launchpad for each queued node to start processing
+		for i := 0; i < queueSize; i++ {
+			select {
+			case tr.launchpad <- struct{}{}:
+			default:
+				// Launchpad full, nodes will be processed eventually
+			}
+		}
+	}
+}
+
+// Pause pauses the processing of nodes (they will be queued but not dispatched to workers)
+func (tr *TurboRun) Pause() {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	tr.paused = true
+	tr.logger.Printf("TurboRun %s: Paused", tr.uniqueID)
+}
+
+// IsPaused returns whether TurboRun is currently paused
+func (tr *TurboRun) IsPaused() bool {
+	tr.mu.RLock()
+	defer tr.mu.RUnlock()
+
+	return tr.paused
 }
 
 // Stop stops the turbo runner gracefully
@@ -130,6 +136,39 @@ doneDrainingPushChan:
 	tr.logger.Printf("TurboRun %s: Reset complete - cancelled %d nodes", tr.uniqueID, len(removedIDs))
 }
 
+// bootstrap starts the internal TurboRun goroutines that listen for events and dispatch them to the appropriate handlers
+func (tr *TurboRun) bootstrap() {
+	// Start core goroutines with WaitGroup tracking
+	tr.wg.Add(6)
+	go func() {
+		defer tr.wg.Done()
+		instance.listenForGraphReadyNodes()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.listenForLaunchPad()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.startMinuteTimer()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.listenForWorkerStateChanges()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.listenForWorkNodePushRequests()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.startAnalyticsLogger()
+	}()
+
+	time.Sleep(5 * time.Millisecond) // give time for the goroutines to start
+	tr.logger.Printf("TurboRun %s: Engine started with %d workers (paused, awaiting Start() call)", tr.uniqueID, tr.workersPool.GetWorkerCount())
+}
+
 // listenForGraphReadyNodes listens for ready nodes published from the Graph and pushes them into the priority queue
 func (tr *TurboRun) listenForGraphReadyNodes() {
 	for {
@@ -158,43 +197,6 @@ func (tr *TurboRun) listenForGraphReadyNodes() {
 			tr.launchpad <- struct{}{}
 		}
 	}
-}
-
-// Pause pauses the processing of nodes (they will be queued but not dispatched to workers)
-func (tr *TurboRun) Pause() {
-	tr.mu.Lock()
-	defer tr.mu.Unlock()
-	tr.paused = true
-	tr.logger.Printf("TurboRun %s: Paused", tr.uniqueID)
-}
-
-// Resume resumes the processing of nodes
-func (tr *TurboRun) Resume() {
-	tr.mu.Lock()
-	wasPaused := tr.paused
-	tr.paused = false
-	queueSize := tr.priorityQueue.Size()
-	tr.mu.Unlock()
-
-	if wasPaused {
-		tr.logger.Printf("TurboRun %s: Resumed with %d nodes in queue", tr.uniqueID, queueSize)
-
-		// Signal the launchpad for each queued node to start processing
-		for i := 0; i < queueSize; i++ {
-			select {
-			case tr.launchpad <- struct{}{}:
-			default:
-				// Launchpad full, nodes will be processed eventually
-			}
-		}
-	}
-}
-
-// IsPaused returns whether TurboRun is currently paused
-func (tr *TurboRun) IsPaused() bool {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
-	return tr.paused
 }
 
 // listenForLaunchPad reads the value being put on the launchpad and sends them off to the workers pool

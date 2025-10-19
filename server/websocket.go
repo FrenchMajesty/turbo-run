@@ -174,9 +174,9 @@ func StartProcessing() {
 		io.Emit("processing_started", "")
 	}
 
-	// Resume TurboRun to start processing the queued nodes
+	// Start TurboRun to begin processing the queued nodes
 	if turboRun != nil {
-		turboRun.Resume()
+		turboRun.Start()
 	}
 
 	// Start monitoring for completion

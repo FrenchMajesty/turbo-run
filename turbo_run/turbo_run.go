@@ -162,6 +162,8 @@ func NewTurboRun(opts Options) *TurboRun {
 			opts.OpenAIClient,
 			workerStateChan,
 		)
+
+		instance.bootstrap()
 	})
 
 	return instance
