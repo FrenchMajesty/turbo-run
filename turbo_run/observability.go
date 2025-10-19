@@ -20,6 +20,7 @@ const (
 	EventNodeRetrying    EventType = "node_retrying"
 	EventNodeCompleted   EventType = "node_completed"
 	EventNodeFailed      EventType = "node_failed"
+	EventNodeCancelled   EventType = "node_cancelled"
 
 	// Rate limit budget events
 	EventBudgetConsumed EventType = "budget_consumed"

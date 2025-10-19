@@ -8,6 +8,19 @@ import (
 	"github.com/google/uuid"
 )
 
+// FailureHandlingStrategy determines how to handle failures that occur after retries are exhausted
+type FailureHandlingStrategy string
+
+const (
+	// FailureStrategyPropagate causes failures to cascade down the dependency tree,
+	// recursively cancelling all dependent children
+	FailureStrategyPropagate FailureHandlingStrategy = "propagate"
+
+	// FailureStrategyIsolate isolates failures to just the failed node,
+	// allowing dependent children to proceed with execution
+	FailureStrategyIsolate FailureHandlingStrategy = "isolate"
+)
+
 // Start starts the turbo runner
 func (tr *TurboRun) Start() {
 	// Start core goroutines with WaitGroup tracking
@@ -194,6 +207,30 @@ func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 			tr.mu.Lock()
 			tr.failedCount++
 			tr.mu.Unlock()
+
+			// Handle failure based on strategy
+			if tr.failureHandlingStrategy == FailureStrategyPropagate {
+				// Propagate: recursively remove all descendants
+				removedIDs := tr.graph.RemoveSubtree(node.ID)
+
+				// Emit cancellation events for all removed descendants (excluding the failed node itself)
+				for _, removedID := range removedIDs {
+					if removedID != node.ID {
+						tr.emitEvent(EventNodeCancelled, removedID, map[string]any{
+							"reason":        "parent_failure",
+							"failed_parent": node.ID.String(),
+						})
+
+						// Increment failed count for each cancelled child
+						tr.mu.Lock()
+						tr.failedCount++
+						tr.mu.Unlock()
+					}
+				}
+			} else {
+				// Isolate: just remove the failed node, children proceed normally
+				tr.graph.Remove(node.ID)
+			}
 		} else {
 			tr.emitEvent(EventNodeCompleted, node.ID, map[string]any{
 				"duration":    result.Duration.String(),
@@ -204,9 +241,10 @@ func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 			tr.mu.Lock()
 			tr.completedCount++
 			tr.mu.Unlock()
-		}
 
-		tr.graph.Remove(node.ID)
+			// Always remove successful nodes normally
+			tr.graph.Remove(node.ID)
+		}
 
 		// Notify waiting goroutines that graph space is available
 		// Non-blocking send to avoid blocking the callback

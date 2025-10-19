@@ -60,18 +60,60 @@ func (g *Graph) Add(node *WorkNode, dependencies []uuid.UUID) {
 func (g *Graph) Remove(uuid uuid.UUID) {
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
+	g.remove(uuid, true)
+}
+
+// remove is a helper that removes a node from the graph and updates the indegree of the children. Must be called with mutex already held.
+func (g *Graph) remove(uuid uuid.UUID, emitReady bool) {
 	delete(g.nodes, uuid)
 	delete(g.indegree, uuid)
 
 	for _, child := range g.children[uuid] {
 		g.indegree[child]--
 
-		if g.indegree[child] == 0 {
+		if g.indegree[child] == 0 && emitReady {
 			g.readyNodesChan <- g.nodes[child]
 		}
 	}
 
 	delete(g.children, uuid)
+}
+
+// RemoveSubtree removes a node and all of its descendants from the graph recursively.
+// This is used when a failure should propagate down the dependency tree.
+// Returns the list of all removed node IDs (including the root).
+func (g *Graph) RemoveSubtree(nodeID uuid.UUID) []uuid.UUID {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+
+	removedIDs := []uuid.UUID{}
+	g.removeSubtreeRecursive(nodeID, &removedIDs)
+	// reverse list to have root at index 0
+	for i, j := 0, len(removedIDs)-1; i < j; i, j = i+1, j-1 {
+		removedIDs[i], removedIDs[j] = removedIDs[j], removedIDs[i]
+	}
+
+	return removedIDs
+}
+
+// removeSubtreeRecursive is a helper that recursively removes a node and its descendants
+// Must be called with mutex already held
+func (g *Graph) removeSubtreeRecursive(nodeID uuid.UUID, removedIDs *[]uuid.UUID) {
+	// If node doesn't exist, nothing to do
+	if _, exists := g.nodes[nodeID]; !exists {
+		return
+	}
+
+	// First, recursively remove all children
+	childrenToRemove := make([]uuid.UUID, len(g.children[nodeID]))
+	copy(childrenToRemove, g.children[nodeID])
+
+	for _, childID := range childrenToRemove {
+		g.removeSubtreeRecursive(childID, removedIDs)
+	}
+
+	g.remove(nodeID, false)
+	*removedIDs = append(*removedIDs, nodeID)
 }
 
 // GetNodesWithNoDependencies returns the nodes with no dependencies

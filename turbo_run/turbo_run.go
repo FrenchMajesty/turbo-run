@@ -38,9 +38,10 @@ type TurboRun struct {
 	pushChan         chan *pushToGraphRequest // buffered channel for incoming graph nodes
 
 	// Misc
-	mu           sync.RWMutex   // protects launchedCount and stats reading
-	wg           sync.WaitGroup // tracks goroutines for graceful shutdown
-	maxGraphSize int            // 0 = unlimited
+	mu                      sync.RWMutex            // protects launchedCount and stats reading
+	wg                      sync.WaitGroup          // tracks goroutines for graceful shutdown
+	maxGraphSize            int                     // 0 = unlimited
+	failureHandlingStrategy FailureHandlingStrategy // determines how to handle node failures
 
 	// Stats attributes
 	uniqueID       string
@@ -89,6 +90,10 @@ type Options struct {
 
 	// WorkerPoolSize is the number of workers to use in the worker pool. Default is 120.
 	WorkerPoolSize int
+
+	// failureHandlingStrategy determines how to handle node failures after retries are exhausted.
+	// Default is FailureStrategyPropagate (failures cascade to dependent children).
+	failureHandlingStrategy FailureHandlingStrategy
 }
 
 // NewTurboRun creates a new singleton instance of TurboRun.
@@ -114,6 +119,10 @@ func NewTurboRun(opts Options) *TurboRun {
 			opts.WorkerPoolSize = 120
 		}
 
+		if opts.failureHandlingStrategy == "" {
+			opts.failureHandlingStrategy = FailureStrategyPropagate
+		}
+
 		// Calculate buffer sizes
 		pushBufferSize := opts.MaxGraphSize
 		if pushBufferSize == 0 {
@@ -125,9 +134,10 @@ func NewTurboRun(opts Options) *TurboRun {
 
 		instance = &TurboRun{
 			// Attributes
-			uniqueID:     uniqueID,
-			maxGraphSize: opts.MaxGraphSize,
-			startTime:    time.Now(),
+			uniqueID:                uniqueID,
+			maxGraphSize:            opts.MaxGraphSize,
+			startTime:               time.Now(),
+			failureHandlingStrategy: opts.failureHandlingStrategy,
 
 			// Core components
 			graph:         NewGraph(opts.MaxGraphSize),
