@@ -219,11 +219,6 @@ func broadcastEvents() {
 			continue
 		}
 
-		// Broadcast stats when nodes are prioritized to update PQ view
-		if event.Type == "node_prioritized" {
-			BroadcastStats()
-		}
-
 		// Convert event to JSON
 		eventJSON, err := json.Marshal(event)
 		if err != nil {

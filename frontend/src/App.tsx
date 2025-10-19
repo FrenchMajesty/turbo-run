@@ -100,6 +100,17 @@ function App() {
     const type = event.type;
     const data = event.data || {};
 
+    // Handle priority queue events
+    if (type === 'priority_queue_add') {
+      setPriorityQueueNodes((prev) => [...prev, nodeId]);
+      return;
+    }
+
+    if (type === 'priority_queue_remove') {
+      setPriorityQueueNodes((prev) => prev.filter((id) => id !== nodeId));
+      return;
+    }
+
     setNodes((prevNodes) => {
       const newNodes = new Map(prevNodes);
 

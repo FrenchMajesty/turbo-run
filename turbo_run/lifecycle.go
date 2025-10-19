@@ -189,6 +189,9 @@ func (tr *TurboRun) listenForGraphReadyNodes() {
 				"queue_size": tr.priorityQueue.Size(),
 			})
 
+			// Emit priority queue add event
+			tr.emitEvent(EventPriorityQueueAdd, node.ID, map[string]any{})
+
 			// Signal that a node is ready to launch
 			tr.launchpad <- struct{}{}
 		}
@@ -217,6 +220,9 @@ func (tr *TurboRun) listenForLaunchPad() {
 			}
 
 			node, _ := tr.priorityQueue.Pop()
+
+			// Emit priority queue remove event
+			tr.emitEvent(EventPriorityQueueRemove, node.ID, map[string]any{})
 
 			// Wait until we have enough budget for this request
 			blocked := false

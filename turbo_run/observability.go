@@ -22,6 +22,10 @@ const (
 	EventNodeFailed      EventType = "node_failed"
 	EventNodeCancelled   EventType = "node_cancelled"
 
+	// Priority queue events
+	EventPriorityQueueAdd    EventType = "priority_queue_add"
+	EventPriorityQueueRemove EventType = "priority_queue_remove"
+
 	// Rate limit budget events
 	EventBudgetConsumed EventType = "budget_consumed"
 	EventBudgetBlocked  EventType = "budget_blocked"

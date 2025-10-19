@@ -6,7 +6,9 @@ export type EventType =
   | 'node_running'
   | 'node_retrying'
   | 'node_completed'
-  | 'node_failed';
+  | 'node_failed'
+  | 'priority_queue_add'
+  | 'priority_queue_remove';
 
 export interface EventData {
   dependencies?: string[];
