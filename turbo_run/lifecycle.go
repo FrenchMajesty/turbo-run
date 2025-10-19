@@ -37,7 +37,7 @@ func (tr *TurboRun) Start() {
 		instance.startAnalyticsLogger()
 	}()
 
-	time.Sleep(10 * time.Millisecond) // give time for the goroutines to start
+	time.Sleep(5 * time.Millisecond) // give time for the goroutines to start
 	tr.logger.Printf("TurboRun %s: Started with %d workers", tr.uniqueID, tr.workersPool.GetWorkerCount())
 }
 
