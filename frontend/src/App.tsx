@@ -146,7 +146,6 @@ function App() {
 
         <div className="main-content">
           <GraphCanvas nodes={nodes} />
-          <NodesContainer nodes={nodes} />
           <EventLog events={events} />
         </div>
       </div>

@@ -65,18 +65,16 @@ func initEventListeners(io *socketio.Io) {
 }
 
 // PrepareGraph prepares the graph by calling the workload generator.
-// If already processing, it will cancel the current processing first.
+// Always clears previous state before preparing a new graph.
 func PrepareGraph() {
 	mutex.Lock()
 
-	// If already processing, cancel it first
+	// Always clear previous state (whether processing, prepared, or idle)
+	needsReset := isProcessing || isGraphPrepared
+
 	if isProcessing {
 		mutex.Unlock()
 		log.Println("Cancelling current processing before preparing new graph...")
-
-		if turboRun != nil {
-			turboRun.Reset()
-		}
 
 		// Stop the monitoring goroutine
 		select {
@@ -85,16 +83,28 @@ func PrepareGraph() {
 		}
 
 		mutex.Lock()
-		isProcessing = false
-		isGraphPrepared = false
-
-		// Notify clients that processing was cancelled
-		if io != nil {
-			io.Emit("graph_cancelled", "")
-		}
 	}
 
+	// Reset TurboRun state if there was any previous graph
+	if needsReset {
+		mutex.Unlock()
+		if turboRun != nil {
+			turboRun.Reset()
+		}
+		mutex.Lock()
+	}
+
+	isProcessing = false
+	isGraphPrepared = false
 	mutex.Unlock()
+
+	// Always notify clients to clear their state
+	if io != nil {
+		io.Emit("graph_cancelled", "")
+	}
+
+	// Small delay to ensure Reset() completes and clients clear their state
+	time.Sleep(100 * time.Millisecond)
 
 	log.Println("Preparing graph...")
 
