@@ -23,23 +23,34 @@ interface GraphCanvasProps {
 }
 
 // Custom node component with fixed dimensions to prevent resize loops
-const WorkNodeComponent = memo(({ data }: { data: NodeData }) => {
-  return (
-    <div style={{ width: '97px', height: '75px', position: 'relative' }}>
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={{ opacity: 0, pointerEvents: 'none' }}
-      />
-      <WorkNodeCard node={data} />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={{ opacity: 0, pointerEvents: 'none' }}
-      />
-    </div>
-  );
-});
+// Use memo with custom comparison to ensure we re-render when data.status changes
+const WorkNodeComponent = memo(
+  ({ data }: { data: NodeData }) => {
+    return (
+      <div style={{ width: '97px', height: '75px', position: 'relative' }}>
+        <Handle
+          type="target"
+          position={Position.Top}
+          style={{ opacity: 0, pointerEvents: 'none' }}
+        />
+        <WorkNodeCard node={data} />
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          style={{ opacity: 0, pointerEvents: 'none' }}
+        />
+      </div>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Re-render if status or any data property changes
+    return (
+      prevProps.data.id === nextProps.data.id &&
+      prevProps.data.status === nextProps.data.status &&
+      JSON.stringify(prevProps.data.data) === JSON.stringify(nextProps.data.data)
+    );
+  }
+);
 
 WorkNodeComponent.displayName = 'WorkNodeComponent';
 
@@ -52,12 +63,12 @@ const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ nodes }) => {
   const reactFlowInstance = useReactFlow();
   const hasInitialized = useRef(false);
 
-  // Create a stable key based only on node IDs (not status changes)
+  // Create a stable key based only on node IDs (for layout recalculation)
   const nodeIdsKey = useMemo(() => {
     return Array.from(nodes.keys()).sort().join(',');
   }, [nodes]);
 
-  // Only recalculate layout when nodes are added/removed, NOT on status updates
+  // Recalculate layout when nodes are added/removed
   const layoutedElements = useMemo(() => {
     return getLayoutedElements(nodes);
   }, [nodeIdsKey]);
@@ -65,7 +76,7 @@ const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ nodes }) => {
   const [nodesState, setNodes, onNodesChange] = useNodesState(layoutedElements.nodes);
   const [edgesState, setEdges, onEdgesChange] = useEdgesState(layoutedElements.edges);
 
-  // Update nodes and edges when layout changes
+  // Update layout when nodes are added/removed
   useEffect(() => {
     setNodes(layoutedElements.nodes);
     setEdges(layoutedElements.edges);
@@ -78,6 +89,19 @@ const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ nodes }) => {
       hasInitialized.current = true;
     }
   }, [layoutedElements, setNodes, setEdges, reactFlowInstance]);
+
+  // Update node data when statuses change (without recalculating layout)
+  useEffect(() => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        const updatedData = nodes.get(node.id);
+        if (updatedData) {
+          return { ...node, data: updatedData };
+        }
+        return node;
+      })
+    );
+  }, [nodes, setNodes]);
 
   return (
     <div className={styles.graphContainer}>

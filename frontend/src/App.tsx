@@ -104,11 +104,15 @@ function App() {
           tokens: data.estimated_tokens || 0,
           data: {},
         });
+      } else {
+        // Create a NEW node object (don't mutate the existing one!)
+        const existingNode = newNodes.get(nodeId)!;
+        newNodes.set(nodeId, {
+          ...existingNode,
+          status: type,
+          data: { ...existingNode.data, ...data },
+        });
       }
-
-      const node = newNodes.get(nodeId)!;
-      node.status = type;
-      node.data = { ...node.data, ...data };
 
       return newNodes;
     });
@@ -145,8 +149,8 @@ function App() {
         <StatsDashboard stats={stats} />
 
         <div className="main-content">
-          <GraphCanvas nodes={nodes} />
           <EventLog events={events} />
+          <GraphCanvas nodes={nodes} />
         </div>
       </div>
     </div>
