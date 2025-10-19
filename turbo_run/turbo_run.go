@@ -113,23 +113,26 @@ func NewTurboRun(opts Options) *TurboRun {
 		if opts.WorkerPoolSize <= 0 {
 			opts.WorkerPoolSize = 120
 		}
+
+		// Calculate buffer sizes
 		pushBufferSize := opts.MaxGraphSize
 		if pushBufferSize == 0 {
 			pushBufferSize = 1000 // Default buffer for unlimited graphs
 		}
 
 		eventChannelSize := int(math.Max(1000, float64(opts.WorkerPoolSize*10))) // 1K or 10 times the worker pool size, whichever is greater
+		workerStateChan := make(chan int, opts.WorkerPoolSize*2)                 // 2 events per worker (busy/idle), channel is pass-through for state
 
 		instance = &TurboRun{
 			uniqueID:         uniqueID,
-			graph:            NewGraph(),
+			graph:            NewGraph(opts.MaxGraphSize),
 			priorityQueue:    priority_queue.NewMaxPriorityQueue[*WorkNode](),
 			tracker:          NewConsumptionTracker(opts.Backend),
 			quit:             make(chan struct{}),
 			launchpad:        make(chan struct{}, opts.WorkerPoolSize), // Makes nodes available to the worker pool
 			eventChan:        make(chan *Event, eventChannelSize),      // ~10 events per node, channel is pass-through for observability
-			workerStateChan:  make(chan int, opts.WorkerPoolSize*2),    // 2 events per worker (busy/idle), channel is pass-through for state
-			graphSpaceNotify: make(chan struct{}, 1),                   // Buffered to prevent blocking
+			workerStateChan:  workerStateChan,
+			graphSpaceNotify: make(chan struct{}, 1), // Buffered to prevent blocking
 			pushChan:         make(chan *pushRequest, pushBufferSize),
 			logger:           opts.Logger,
 			maxGraphSize:     opts.MaxGraphSize,
@@ -140,7 +143,7 @@ func NewTurboRun(opts Options) *TurboRun {
 			opts.WorkerPoolSize,
 			&opts.GroqClient,
 			opts.OpenAIClient,
-			instance.workerStateChan,
+			workerStateChan,
 		)
 
 		instance.Start()
@@ -165,7 +168,7 @@ func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 		workNode.SetLogger(tr.logger)
 	}
 
-	// Send to push channel (blocks if channel is full - natural backpressure)
+	// Send to push channel (blocks if channel is full)
 	tr.pushChan <- &pushRequest{
 		node:         workNode,
 		dependencies: []uuid.UUID{},
@@ -173,7 +176,7 @@ func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 
 	// Small sleep to allow async processing to complete
 	// This maintains quasi-synchronous behavior for tests
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Nanosecond)
 
 	return tr
 }
@@ -185,7 +188,7 @@ func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid
 		workNode.SetLogger(tr.logger)
 	}
 
-	// Send to push channel (blocks if channel is full - natural backpressure)
+	// Send to push channel (blocks if channel is full)
 	tr.pushChan <- &pushRequest{
 		node:         workNode,
 		dependencies: dependencies,
@@ -193,7 +196,7 @@ func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid
 
 	// Small sleep to allow async processing to complete
 	// This maintains quasi-synchronous behavior for tests
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Nanosecond)
 
 	return tr
 }

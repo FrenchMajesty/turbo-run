@@ -1,6 +1,7 @@
 package turbo_run
 
 import (
+	"math"
 	"sync"
 
 	"github.com/google/uuid"
@@ -12,17 +13,26 @@ type Graph struct {
 	indegree       map[uuid.UUID]int
 	mutex          sync.RWMutex
 	readyNodesChan chan *WorkNode
+	size           int
 }
 
-func NewGraph() *Graph {
+// NewGraph creates a new graph with a configurable size
+func NewGraph(size int) *Graph {
+	bufferSize := int(math.Min(10_000, float64(size)/3)) // at most 10K buffer size
+	if bufferSize <= 0 {
+		bufferSize = 1000 // Default buffer size on unbounded graphs
+	}
+
 	return &Graph{
-		nodes:          make(map[uuid.UUID]*WorkNode),
-		children:       make(map[uuid.UUID][]uuid.UUID),
-		indegree:       make(map[uuid.UUID]int),
-		readyNodesChan: make(chan *WorkNode, 1000),
+		nodes:          make(map[uuid.UUID]*WorkNode, size),
+		children:       make(map[uuid.UUID][]uuid.UUID, size),
+		indegree:       make(map[uuid.UUID]int, size),
+		readyNodesChan: make(chan *WorkNode, bufferSize),
+		size:           size,
 	}
 }
 
+// Size returns the number of nodes in the graph
 func (g *Graph) Size() int {
 	g.mutex.RLock()
 	defer g.mutex.RUnlock()

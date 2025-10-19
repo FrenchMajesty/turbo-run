@@ -86,8 +86,7 @@ func (tr *TurboRun) listenForGraphReadyNodes() {
 				"queue_size": tr.priorityQueue.Size(),
 			})
 
-			// Wait for the PQ to get re-organized
-			time.Sleep(5 * time.Millisecond)
+			// Signal that a node is ready to launch
 			tr.launchpad <- struct{}{}
 		}
 	}
