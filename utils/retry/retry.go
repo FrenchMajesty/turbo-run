@@ -18,7 +18,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		MaxRetries:      3,
-		BaseDelay:       200 * time.Millisecond,
+		BaseDelay:       50 * time.Millisecond,
 		MaxDelay:        5 * time.Second,
 		BackoffMultiple: 2.0,
 	}
