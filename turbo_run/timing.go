@@ -43,7 +43,6 @@ func (tr *TurboRun) onMinuteChange() {
 
 	// Emit budget reset event
 	tr.emitEvent(EventBudgetReset, uuid.Nil, map[string]any{
-		"timestamp": time.Now().Format(time.RFC3339),
 		"providers": []string{"groq", "openai"},
 	})
 }

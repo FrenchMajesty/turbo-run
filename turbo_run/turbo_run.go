@@ -29,12 +29,12 @@ type TurboRun struct {
 	workersPool   *workerPool
 
 	// Channels
-	quit               chan struct{}
-	launchpad          chan struct{}
-	eventChan          chan *Event
-	workerStateChan    chan int
-	pushChan           chan *pushRequest // buffered channel for incoming graph nodes
-	graphSpaceNotify   chan struct{}     // signals when graph space becomes available
+	quit             chan struct{}
+	launchpad        chan struct{}
+	eventChan        chan *Event
+	workerStateChan  chan int
+	pushChan         chan *pushRequest // buffered channel for incoming graph nodes
+	graphSpaceNotify chan struct{}     // signals when graph space becomes available
 
 	// Misc
 	mu           sync.RWMutex   // protects launchedCount and stats reading
@@ -114,8 +114,6 @@ func NewTurboRunWithBackend(
 			backend = memory.NewBackend()
 		}
 
-		workerStateChan := make(chan int, 100)
-
 		instance = &TurboRun{
 			uniqueID:         uniqueID,
 			graph:            NewGraph(),
@@ -124,8 +122,8 @@ func NewTurboRunWithBackend(
 			quit:             make(chan struct{}),
 			launchpad:        make(chan struct{}, 100),
 			eventChan:        make(chan *Event, 1000),
-			workerStateChan:  workerStateChan,
-			graphSpaceNotify: make(chan struct{}, 1), // Buffered to prevent blocking
+			workerStateChan:  make(chan int, 100),
+			graphSpaceNotify: make(chan struct{}, 1),   // Buffered to prevent blocking
 			logger:           logger.NewStdoutLogger(), // Default to stdout
 			maxGraphSize:     0,                        // Default unlimited
 			startTime:        time.Now(),
@@ -144,7 +142,7 @@ func NewTurboRunWithBackend(
 		}
 		instance.pushChan = make(chan *pushRequest, pushBufferSize)
 
-		instance.workersPool = NewWorkerPool(120, &groqClient, openaiClient, workerStateChan)
+		instance.workersPool = NewWorkerPool(120, &groqClient, openaiClient, instance.workerStateChan)
 
 		instance.Start()
 
@@ -183,7 +181,7 @@ func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 
 	// Small sleep to allow async processing to complete
 	// This maintains quasi-synchronous behavior for tests
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(5 * time.Nanosecond)
 
 	return tr
 }

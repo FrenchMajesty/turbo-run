@@ -122,16 +122,18 @@ func (tr *TurboRun) listenForLaunchPad() {
 					break // We have enough budget, proceed
 				}
 
+				eventMetadata := map[string]any{
+					"provider":           providerName(node.GetProvider()),
+					"needed_tokens":      node.GetEstimatedTokens(),
+					"available_tokens":   tokensBudget,
+					"available_requests": requestBudget,
+					"time_until_reset":   tr.tracker.TimeUntilReset().String(),
+				}
+
 				// Emit blocking event only once per node
 				if !blocked {
 					blocked = true
-					tr.emitEvent(EventBudgetBlocked, node.ID, map[string]any{
-						"provider":           providerName(node.GetProvider()),
-						"needed_tokens":      node.GetEstimatedTokens(),
-						"available_tokens":   tokensBudget,
-						"available_requests": requestBudget,
-						"time_until_reset":   tr.tracker.TimeUntilReset().String(),
-					})
+					tr.emitEvent(EventBudgetBlocked, node.ID, eventMetadata)
 				}
 
 				// Not enough budget, wait until cycle reset (but check for quit signal)
@@ -153,22 +155,19 @@ func (tr *TurboRun) listenForLaunchPad() {
 			totalTokens := tr.getBudgetTotal(node.GetProvider())
 			utilizationPct := float64(totalTokens-tokensAvailable) / float64(totalTokens) * 100
 
-			tr.emitEvent(EventBudgetConsumed, uuid.Nil, map[string]any{
+			metadata := map[string]any{
 				"provider":           providerName(node.GetProvider()),
 				"tokens_consumed":    node.GetEstimatedTokens(),
 				"tokens_available":   tokensAvailable,
 				"requests_available": requestsAvailable,
 				"tokens_total":       totalTokens,
 				"utilization_pct":    utilizationPct,
-			})
+			}
+			tr.emitEvent(EventBudgetConsumed, uuid.Nil, metadata)
 
 			// Emit budget warning if utilization is high
 			if utilizationPct >= 80 {
-				tr.emitEvent(EventBudgetWarning, uuid.Nil, map[string]any{
-					"provider":         providerName(node.GetProvider()),
-					"utilization_pct":  utilizationPct,
-					"tokens_available": tokensAvailable,
-				})
+				tr.emitEvent(EventBudgetWarning, uuid.Nil, metadata)
 			}
 
 			// Emit node dispatched event
@@ -196,6 +195,8 @@ func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 				"error":    result.Error.Error(),
 				"duration": result.Duration.String(),
 			})
+
+			// Increment failed count
 			tr.mu.Lock()
 			tr.failedCount++
 			tr.mu.Unlock()
@@ -204,6 +205,8 @@ func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 				"duration":    result.Duration.String(),
 				"tokens_used": result.TokensUsed,
 			})
+
+			// Increment completed count
 			tr.mu.Lock()
 			tr.completedCount++
 			tr.mu.Unlock()
@@ -284,25 +287,16 @@ func (tr *TurboRun) listenForPushRequests() {
 			// Add to graph
 			tr.graph.Add(req.node, req.dependencies)
 
-			// Emit node created event
-			if len(req.dependencies) == 0 {
-				tr.emitEvent(EventNodeCreated, req.node.ID, map[string]any{
-					"dependencies":     []string{},
-					"estimated_tokens": req.node.GetEstimatedTokens(),
-					"provider":         string(req.node.GetProvider()),
-				})
-			} else {
-				// Convert dependencies to strings for JSON
-				depStrings := make([]string, len(req.dependencies))
-				for i, dep := range req.dependencies {
-					depStrings[i] = dep.String()
-				}
-				tr.emitEvent(EventNodeCreated, req.node.ID, map[string]any{
-					"dependencies":     depStrings,
-					"estimated_tokens": req.node.GetEstimatedTokens(),
-					"provider":         string(req.node.GetProvider()),
-				})
+			depStrings := make([]string, len(req.dependencies))
+			for i, dep := range req.dependencies {
+				depStrings[i] = dep.String()
 			}
+
+			tr.emitEvent(EventNodeCreated, req.node.ID, map[string]any{
+				"dependencies":     depStrings,
+				"estimated_tokens": req.node.GetEstimatedTokens(),
+				"provider":         string(req.node.GetProvider()),
+			})
 		}
 	}
 }
