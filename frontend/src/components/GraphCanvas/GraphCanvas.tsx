@@ -17,49 +17,19 @@ import { NodeData } from '../../types/NodeData';
 import { WorkNodeCard } from '../WorkNode/WorkNodeCard';
 import { getLayoutedElements } from '../../utils/graphLayout';
 import styles from './GraphCanvas.module.css';
+import { WorkNodeComponent } from './WorkNodeGraphComponent';
 
 interface GraphCanvasProps {
+  className?: string;
   nodes: Map<string, NodeData>;
 }
-
-// Custom node component with fixed dimensions to prevent resize loops
-// Use memo with custom comparison to ensure we re-render when data.status changes
-const WorkNodeComponent = memo(
-  ({ data }: { data: NodeData }) => {
-    return (
-      <div style={{ width: '97px', height: '75px', position: 'relative' }}>
-        <Handle
-          type="target"
-          position={Position.Left}
-          style={{ opacity: 0, pointerEvents: 'none' }}
-        />
-        <WorkNodeCard node={data} />
-        <Handle
-          type="source"
-          position={Position.Right}
-          style={{ opacity: 0, pointerEvents: 'none' }}
-        />
-      </div>
-    );
-  },
-  (prevProps, nextProps) => {
-    // Re-render if status or any data property changes
-    return (
-      prevProps.data.id === nextProps.data.id &&
-      prevProps.data.status === nextProps.data.status &&
-      JSON.stringify(prevProps.data.data) === JSON.stringify(nextProps.data.data)
-    );
-  }
-);
-
-WorkNodeComponent.displayName = 'WorkNodeComponent';
 
 // Register custom node type (outside component to prevent recreation)
 const nodeTypes: NodeTypes = {
   workNode: WorkNodeComponent,
 };
 
-const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ nodes }) => {
+const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ className, nodes }) => {
   const reactFlowInstance = useReactFlow();
   const hasInitialized = useRef(false);
 
@@ -104,7 +74,7 @@ const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ nodes }) => {
   }, [nodes, setNodes]);
 
   return (
-    <div className={styles.graphContainer}>
+    <div className={`${styles.graphContainer} ${className}`}>
       <h2>🕸️ Dependency Graph</h2>
       <div className={styles.reactFlowWrapper}>
         <ReactFlow
