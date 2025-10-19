@@ -1,0 +1,75 @@
+.workNodeCard {
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  padding: 8px;
+  width: 97px;
+  height: 75px;
+  background: #f1f1f1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.workNodeCard.completed {
+  background: #d4edda;
+}
+
+.workNodeCard.failed {
+  background: #f8d7da;
+}
+
+.workNodeCard.in_progress {
+  background: #d1ecf1;
+}
+
+.nodeId {
+  font-weight: 400;
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.75);
+  margin-bottom: 4px;
+}
+
+.tokenRow {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.tokenCount {
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 100%;
+  color: #000;
+}
+
+.tokenTrail {
+  font-weight: 400;
+  font-size: 10px;
+  color: #000;
+  margin-left: 2px;
+}
+
+.bottomRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.duration {
+  font-weight: 400;
+  font-size: 9px;
+  color: rgba(0, 0, 0, 0.75);
+}
+
+.retryCount {
+  font-weight: 400;
+  font-size: 9px;
+  color: rgba(65, 3, 3, 0.5);
+}
+
+.status {
+  font-weight: 400;
+  font-size: 9px;
+  color: #410000;
+  font-style: italic;
+}

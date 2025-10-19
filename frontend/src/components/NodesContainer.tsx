@@ -1,5 +1,5 @@
 import React from 'react';
-import { WorkNodeCard } from './WorkNodeCard';
+import { WorkNodeCard } from './WorkNode/WorkNodeCard';
 import { NodeData } from '../types/NodeData';
 import styles from '../styles/Node.module.css';
 
