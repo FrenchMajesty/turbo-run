@@ -72,3 +72,16 @@ func (pq *PriorityQueue[T]) Size() int {
 	defer pq.mutex.Unlock()
 	return len(pq.queue.items)
 }
+
+// GetSnapshot returns a copy of all items in the priority queue in priority order
+// without modifying the queue. Items are returned in the order they would be popped.
+func (pq *PriorityQueue[T]) GetSnapshot() []T {
+	pq.mutex.Lock()
+	defer pq.mutex.Unlock()
+
+	items := make([]T, len(pq.queue.items))
+	for i, item := range pq.queue.items {
+		items[i] = item.Item
+	}
+	return items
+}

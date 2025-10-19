@@ -71,17 +71,25 @@ func (tr *TurboRun) GetStats() *TurboRunStats {
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
+	// Get priority queue snapshot and convert WorkNodes to node IDs
+	snapshot := tr.priorityQueue.GetSnapshot()
+	nodeIDs := make([]string, len(snapshot))
+	for i, node := range snapshot {
+		nodeIDs[i] = node.ID.String()
+	}
+
 	return &TurboRunStats{
-		GraphSize:         tr.graph.Size(),
-		PriorityQueueSize: tr.priorityQueue.Size(),
-		LaunchpadSize:     len(tr.launchpad),
-		PushQueueSize:     len(tr.pushChan),
-		LaunchedCount:     tr.launchedCount,
-		CompletedCount:    tr.completedCount,
-		FailedCount:       tr.failedCount,
-		WorkersPoolSize:   tr.workersPool.GetWorkerCount(),
-		WorkersPoolBusy:   tr.workersPool.GetBusyWorkers(),
-		TrackerStats:      tr.tracker.GetStats(),
+		GraphSize:             tr.graph.Size(),
+		PriorityQueueSize:     tr.priorityQueue.Size(),
+		PriorityQueueSnapshot: nodeIDs,
+		LaunchpadSize:         len(tr.launchpad),
+		PushQueueSize:         len(tr.pushChan),
+		LaunchedCount:         tr.launchedCount,
+		CompletedCount:        tr.completedCount,
+		FailedCount:           tr.failedCount,
+		WorkersPoolSize:       tr.workersPool.GetWorkerCount(),
+		WorkersPoolBusy:       tr.workersPool.GetBusyWorkers(),
+		TrackerStats:          tr.tracker.GetStats(),
 	}
 }
 

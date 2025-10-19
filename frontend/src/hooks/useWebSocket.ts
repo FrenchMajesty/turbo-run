@@ -11,6 +11,7 @@ interface UseWebSocketReturn {
   onTurboEvent: (callback: (event: TurboEvent) => void) => void;
   onStatsUpdate: (callback: (stats: Stats) => void) => void;
   onInitialStats: (callback: (stats: Stats) => void) => void;
+  onPriorityQueueUpdate: (callback: (nodeIds: string[]) => void) => void;
   onGraphPreparing: (callback: () => void) => void;
   onGraphPrepared: (callback: () => void) => void;
   onGraphCancelled: (callback: () => void) => void;
@@ -24,6 +25,7 @@ export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocke
   const eventCallbackRef = useRef<((event: TurboEvent) => void) | null>(null);
   const statsCallbackRef = useRef<((stats: Stats) => void) | null>(null);
   const initialStatsCallbackRef = useRef<((stats: Stats) => void) | null>(null);
+  const priorityQueueCallbackRef = useRef<((nodeIds: string[]) => void) | null>(null);
   const graphPreparingCallbackRef = useRef<(() => void) | null>(null);
   const graphPreparedCallbackRef = useRef<(() => void) | null>(null);
   const graphCancelledCallbackRef = useRef<(() => void) | null>(null);
@@ -66,12 +68,20 @@ export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocke
       if (statsCallbackRef.current) {
         statsCallbackRef.current(stats);
       }
+      // Also trigger priority queue update if snapshot is present
+      if (stats.PriorityQueueSnapshot && priorityQueueCallbackRef.current) {
+        priorityQueueCallbackRef.current(stats.PriorityQueueSnapshot);
+      }
     });
 
     socket.on('initial_stats', (data: string) => {
       const stats: Stats = JSON.parse(data);
       if (initialStatsCallbackRef.current) {
         initialStatsCallbackRef.current(stats);
+      }
+      // Also trigger priority queue update if snapshot is present
+      if (stats.PriorityQueueSnapshot && priorityQueueCallbackRef.current) {
+        priorityQueueCallbackRef.current(stats.PriorityQueueSnapshot);
       }
     });
 
@@ -161,6 +171,10 @@ export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocke
     processingCompletedCallbackRef.current = callback;
   }, []);
 
+  const onPriorityQueueUpdate = useCallback((callback: (nodeIds: string[]) => void) => {
+    priorityQueueCallbackRef.current = callback;
+  }, []);
+
   return {
     socket: socketRef.current,
     isConnected,
@@ -169,6 +183,7 @@ export const useWebSocket = (url: string = 'http://localhost:8081'): UseWebSocke
     onTurboEvent,
     onStatsUpdate,
     onInitialStats,
+    onPriorityQueueUpdate,
     onGraphPreparing,
     onGraphPrepared,
     onGraphCancelled,

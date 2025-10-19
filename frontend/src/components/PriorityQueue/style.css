@@ -1,0 +1,30 @@
+.priorityQueue {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 30vw;
+  height: fit-content;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.priorityQueue h2 {
+  margin-bottom: 15px;
+  color: #667eea;
+  white-space: nowrap;
+}
+
+.queueContainer {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  min-width: min-content;
+  align-items: stretch;
+}
+
+.emptyMessage {
+  color: #999;
+  font-style: italic;
+  padding: 10px;
+}

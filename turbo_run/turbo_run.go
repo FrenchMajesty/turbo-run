@@ -53,16 +53,17 @@ type TurboRun struct {
 }
 
 type TurboRunStats struct {
-	GraphSize         int
-	PriorityQueueSize int
-	LaunchpadSize     int
-	PushQueueSize     int
-	LaunchedCount     int
-	CompletedCount    int
-	FailedCount       int
-	WorkersPoolSize   int
-	WorkersPoolBusy   int
-	TrackerStats      *ConsumptionTrackerStats
+	GraphSize              int
+	PriorityQueueSize      int
+	PriorityQueueSnapshot  []string
+	LaunchpadSize          int
+	PushQueueSize          int
+	LaunchedCount          int
+	CompletedCount         int
+	FailedCount            int
+	WorkersPoolSize        int
+	WorkersPoolBusy        int
+	TrackerStats           *ConsumptionTrackerStats
 }
 
 var (

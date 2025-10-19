@@ -10,6 +10,7 @@ import { Stats } from './types/Stats';
 import { NodeData } from './types/NodeData';
 import '@xyflow/react/dist/style.css';
 import './App.css';
+import { PriorityQueue } from './components/PriorityQueue/PriorityQueue';
 
 const INITIAL_STATS: Stats = {
   GraphSize: 0,
@@ -25,6 +26,7 @@ function App() {
   const [nodes, setNodes] = useState<Map<string, NodeData>>(new Map());
   const [events, setEvents] = useState<TurboEvent[]>([]);
   const [stats, setStats] = useState<Stats>(INITIAL_STATS);
+  const [priorityQueueNodes, setPriorityQueueNodes] = useState<string[]>([]);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isGraphPrepared, setIsGraphPrepared] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -36,6 +38,7 @@ function App() {
     onTurboEvent,
     onStatsUpdate,
     onInitialStats,
+    onPriorityQueueUpdate,
     onGraphPreparing,
     onGraphPrepared,
     onGraphCancelled,
@@ -58,6 +61,10 @@ function App() {
       setStats(newStats);
     });
 
+    onPriorityQueueUpdate((nodeIds: string[]) => {
+      setPriorityQueueNodes(nodeIds);
+    });
+
     onGraphPreparing(() => {
       setIsPreparing(true);
       setIsGraphPrepared(false);
@@ -75,6 +82,7 @@ function App() {
       // Clear nodes and events when graph is cancelled
       setNodes(new Map());
       setEvents([]);
+      setPriorityQueueNodes([]);
     });
 
     onProcessingStarted(() => {
@@ -85,7 +93,7 @@ function App() {
       setIsProcessing(false);
       setIsGraphPrepared(false);
     });
-  }, [onTurboEvent, onStatsUpdate, onInitialStats, onGraphPreparing, onGraphPrepared, onGraphCancelled, onProcessingStarted, onProcessingCompleted]);
+  }, [onTurboEvent, onStatsUpdate, onInitialStats, onPriorityQueueUpdate, onGraphPreparing, onGraphPrepared, onGraphCancelled, onProcessingStarted, onProcessingCompleted]);
 
   const handleEvent = (event: TurboEvent) => {
     const nodeId = event.node_id;
@@ -161,6 +169,7 @@ function App() {
 
         <div className="main-content">
           <EventLog events={events} />
+          <PriorityQueue nodeIds={priorityQueueNodes} nodes={nodes} />
           <GraphCanvas nodes={nodes} />
         </div>
       </div>
