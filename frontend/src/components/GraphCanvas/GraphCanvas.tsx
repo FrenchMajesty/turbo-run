@@ -110,10 +110,10 @@ const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ className, nodes }) => {
   );
 };
 
-export const GraphCanvas: React.FC<GraphCanvasProps> = ({ nodes }) => {
+export const GraphCanvas: React.FC<GraphCanvasProps> = ({ className = '', nodes }) => {
   return (
     <ReactFlowProvider>
-      <GraphCanvasInner nodes={nodes} />
+      <GraphCanvasInner className={className} nodes={nodes} />
     </ReactFlowProvider>
   );
 };

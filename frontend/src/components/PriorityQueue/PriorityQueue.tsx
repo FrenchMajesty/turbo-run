@@ -4,13 +4,14 @@ import { WorkNodeCard } from '../WorkNode/WorkNodeCard';
 import './style.css';
 
 type PriorityQueueProps = {
+    className?: string;
     nodeIds: string[];
     nodes: Map<string, NodeData>;
 }
 
-export const PriorityQueue: React.FC<PriorityQueueProps> = ({ nodeIds, nodes }) => {
+export const PriorityQueue: React.FC<PriorityQueueProps> = ({ className = '', nodeIds, nodes }) => {
     return (
-        <div className="priorityQueue">
+        <div className={`priorityQueue ${className}`}>
             <h2>Priority Queue</h2>
             {nodeIds.length === 0 ? (
                 <div className="emptyMessage">Queue is empty</div>

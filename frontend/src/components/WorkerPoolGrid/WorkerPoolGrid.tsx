@@ -4,12 +4,14 @@ import { WorkNodeCard } from '../WorkNode/WorkNodeCard';
 import './style.css';
 
 interface WorkerPoolGridProps {
+  className?: string;
   workerStates: { [workerId: string]: string };
   nodes: Map<string, NodeData>;
   totalWorkers: number;
 }
 
 export const WorkerPoolGrid: React.FC<WorkerPoolGridProps> = ({
+  className = '',
   workerStates,
   nodes,
   totalWorkers,
@@ -18,7 +20,7 @@ export const WorkerPoolGrid: React.FC<WorkerPoolGridProps> = ({
   const workerIds = Array.from({ length: totalWorkers }, (_, i) => i);
 
   return (
-    <div className="workerPoolGrid">
+    <div className={`workerPoolGrid ${className}`}>
       <h2>Worker Pool ({totalWorkers} workers)</h2>
       <div className="gridContainer">
         {workerIds.map((workerId) => {
