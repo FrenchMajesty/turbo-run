@@ -11,6 +11,7 @@ import { NodeData } from './types/NodeData';
 import '@xyflow/react/dist/style.css';
 import './App.css';
 import { PriorityQueue } from './components/PriorityQueue/PriorityQueue';
+import { WorkerPoolGrid } from './components/WorkerPoolGrid/WorkerPoolGrid';
 
 const INITIAL_STATS: Stats = {
   GraphSize: 0,
@@ -27,6 +28,7 @@ function App() {
   const [events, setEvents] = useState<TurboEvent[]>([]);
   const [stats, setStats] = useState<Stats>(INITIAL_STATS);
   const [priorityQueueNodes, setPriorityQueueNodes] = useState<string[]>([]);
+  const [workerStates, setWorkerStates] = useState<{ [workerId: string]: string }>({});
   const [isPreparing, setIsPreparing] = useState(false);
   const [isGraphPrepared, setIsGraphPrepared] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -83,6 +85,7 @@ function App() {
       setNodes(new Map());
       setEvents([]);
       setPriorityQueueNodes([]);
+      setWorkerStates({});
     });
 
     onProcessingStarted(() => {
@@ -109,6 +112,30 @@ function App() {
     if (type === 'priority_queue_remove') {
       setPriorityQueueNodes((prev) => prev.filter((id) => id !== nodeId));
       return;
+    }
+
+    // Handle worker state changes - track which worker is working on which node
+    if (type === 'node_running' && data.worker_id !== undefined) {
+      const workerId = data.worker_id;
+      setWorkerStates((prev) => ({
+        ...prev,
+        [workerId.toString()]: nodeId,
+      }));
+    }
+
+    // Clear worker state when node completes or fails
+    if (type === 'node_completed' || type === 'node_failed') {
+      // Find and clear the worker that was working on this node
+      setWorkerStates((prev) => {
+        const newStates = { ...prev };
+        for (const [workerId, workerNodeId] of Object.entries(newStates)) {
+          if (workerNodeId === nodeId) {
+            delete newStates[workerId];
+            break;
+          }
+        }
+        return newStates;
+      });
     }
 
     setNodes((prevNodes) => {
@@ -182,6 +209,11 @@ function App() {
           <EventLog events={events} />
           <PriorityQueue nodeIds={priorityQueueNodes} nodes={nodes} />
           <GraphCanvas nodes={nodes} />
+          <WorkerPoolGrid
+            workerStates={workerStates}
+            nodes={nodes}
+            totalWorkers={stats.WorkersPoolSize}
+          />
         </div>
       </div>
     </div>

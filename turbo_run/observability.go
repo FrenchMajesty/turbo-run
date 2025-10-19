@@ -93,6 +93,7 @@ func (tr *TurboRun) GetStats() *TurboRunStats {
 		FailedCount:           tr.failedCount,
 		WorkersPoolSize:       tr.workersPool.GetWorkerCount(),
 		WorkersPoolBusy:       tr.workersPool.GetBusyWorkers(),
+		WorkerStates:          tr.workersPool.GetWorkerStates(),
 		TrackerStats:          tr.tracker.GetStats(),
 	}
 }

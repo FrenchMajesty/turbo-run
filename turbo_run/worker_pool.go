@@ -11,6 +11,7 @@ import (
 type workerPool struct {
 	wg              sync.WaitGroup
 	workerState     map[int]bool
+	workerNodeMap   map[int]*WorkNode // Maps worker ID to the WorkNode it's executing
 	busyWorkers     int
 	workerCount     int
 	pool            chan *WorkNode
@@ -25,6 +26,7 @@ func NewWorkerPool(workersCount int, groq *groq.GroqClientInterface, openai *ope
 	pool := &workerPool{
 		wg:              sync.WaitGroup{},
 		workerState:     make(map[int]bool, workersCount),
+		workerNodeMap:   make(map[int]*WorkNode, workersCount),
 		workerCount:     workersCount,
 		quit:            make(chan struct{}),
 		pool:            make(chan *WorkNode, workersCount*2),
@@ -69,6 +71,22 @@ func (wp *workerPool) GetBusyWorkers() int {
 	return wp.busyWorkers
 }
 
+// GetWorkerStates returns a map of worker ID to node ID (empty string if idle)
+func (wp *workerPool) GetWorkerStates() map[int]string {
+	wp.mu.RLock()
+	defer wp.mu.RUnlock()
+
+	states := make(map[int]string, wp.workerCount)
+	for i := 0; i < wp.workerCount; i++ {
+		if node, ok := wp.workerNodeMap[i]; ok && node != nil {
+			states[i] = node.ID.String()
+		} else {
+			states[i] = ""
+		}
+	}
+	return states
+}
+
 // start starts the worker pool by creating the workers
 func (wp *workerPool) start(workersCount int) {
 	for i := 0; i < workersCount; i++ {
@@ -84,11 +102,11 @@ func (wp *workerPool) worker(workerID int) {
 	for {
 		select {
 		case node := <-wp.pool:
-			wp.changeBusyState(workerID, true)
+			wp.changeBusyState(workerID, true, node)
 
 			// Recover from panics
 			func() {
-				defer wp.changeBusyState(workerID, false) // Mark not-busy when work completes
+				defer wp.changeBusyState(workerID, false, nil) // Mark not-busy when work completes
 
 				if r := recover(); r != nil {
 					result := RunResult{
@@ -107,6 +125,16 @@ func (wp *workerPool) worker(workerID int) {
 				}
 
 				node.SetStatus(WorkNodeStatusRunning)
+
+				// Emit running event with worker ID
+				turboRun, err := GetTurboRun()
+				if err == nil {
+					turboRun.emitEvent(EventNodeRunning, node.ID, map[string]any{
+						"provider":  providerName(node.GetProvider()),
+						"worker_id": workerID,
+					})
+				}
+
 				result := node.workFn(node, wp.groq, wp.openai)
 				node.EmitResult(result)
 				if result.Error == nil {
@@ -130,15 +158,17 @@ func (wp *workerPool) IsBusy() bool {
 }
 
 // changeBusyState changes the busy state of the worker
-func (wp *workerPool) changeBusyState(workerID int, busy bool) {
+func (wp *workerPool) changeBusyState(workerID int, busy bool, node *WorkNode) {
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 	wp.workerState[workerID] = busy
 
 	if busy {
 		wp.busyWorkers++
+		wp.workerNodeMap[workerID] = node
 	} else {
 		wp.busyWorkers--
+		delete(wp.workerNodeMap, workerID)
 	}
 
 	// Notify TurboRun of worker state change (non-blocking)

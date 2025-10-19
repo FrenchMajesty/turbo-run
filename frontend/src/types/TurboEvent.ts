@@ -18,6 +18,7 @@ export interface EventData {
   error?: string;
   attempt?: number;
   max_retries?: number;
+  worker_id?: number;
   [key: string]: any;
 }
 

@@ -9,7 +9,6 @@ type PriorityQueueProps = {
 }
 
 export const PriorityQueue: React.FC<PriorityQueueProps> = ({ nodeIds, nodes }) => {
-    console.log('nodeIds', nodeIds);
     return (
         <div className="priorityQueue">
             <h2>Priority Queue</h2>

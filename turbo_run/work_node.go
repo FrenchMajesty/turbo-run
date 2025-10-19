@@ -344,14 +344,6 @@ func executeStandardGroqRequest(w *WorkNode, groq *groq.GroqClientInterface, ope
 
 	w.SetStatus(WorkNodeStatusRunning)
 
-	// Emit running event
-	turboRun, err := GetTurboRun()
-	if err == nil {
-		turboRun.emitEvent(EventNodeRunning, w.ID, map[string]any{
-			"provider": "groq",
-		})
-	}
-
 	response, err := (*groq).ChatCompletion(context.Background(), w.GetGroqReq())
 	if err != nil {
 		w.SetStatus(WorkNodeStatusFailed)

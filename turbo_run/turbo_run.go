@@ -63,6 +63,7 @@ type TurboRunStats struct {
 	FailedCount            int
 	WorkersPoolSize        int
 	WorkersPoolBusy        int
+	WorkerStates           map[int]string // Maps worker ID to node ID (empty string if idle)
 	TrackerStats           *ConsumptionTrackerStats
 }
 
