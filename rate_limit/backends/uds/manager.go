@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/FrenchMajesty/turbo-run/rate_limit"
+	"github.com/FrenchMajesty/turbo-run/utils/logger"
 )
 
 const (
@@ -33,10 +34,11 @@ type Manager struct {
 	clients       map[net.Conn]bool
 	clientsMu     sync.Mutex
 	quit          chan struct{}
+	logger        logger.Logger
 }
 
 // NewManager creates a new rate limit manager
-func NewManager() *Manager {
+func NewManager(logger logger.Logger) *Manager {
 	return &Manager{
 		state:         make(map[string]usageData),
 		currentMinute: time.Now().Truncate(time.Minute).Format(time.RFC3339),
@@ -46,6 +48,7 @@ func NewManager() *Manager {
 		},
 		clients: make(map[net.Conn]bool),
 		quit:    make(chan struct{}),
+		logger:  logger,
 	}
 }
 
@@ -66,7 +69,7 @@ func (m *Manager) Start() error {
 		return fmt.Errorf("failed to set socket permissions: %w", err)
 	}
 
-	fmt.Printf("Rate limit manager started on %s\n", socketPath)
+	m.logger.Printf("Rate limit manager started on %s\n", socketPath)
 
 	// Start minute timer
 	go m.startMinuteTimer()
@@ -98,7 +101,7 @@ func (m *Manager) acceptConnections() {
 			case <-m.quit:
 				return
 			default:
-				fmt.Printf("Accept error: %v\n", err)
+				m.logger.Printf("Accept error: %v\n", err)
 				continue
 			}
 		}
@@ -299,7 +302,7 @@ func (m *Manager) monitorIdleState() {
 				if idleSince.IsZero() {
 					idleSince = time.Now()
 				} else if time.Since(idleSince) > 5*time.Second {
-					fmt.Println("No clients connected for 5 seconds, shutting down manager")
+					m.logger.Println("No clients connected for 5 seconds, shutting down manager")
 					m.Stop()
 					os.Exit(0)
 				}
@@ -312,7 +315,7 @@ func (m *Manager) monitorIdleState() {
 
 // RunServer is the entry point for running the manager as a subprocess
 func RunServer() {
-	manager := NewManager()
+	manager := NewManager(logger.NewStdoutLogger())
 	if err := manager.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start rate limit manager: %v\n", err)
 		os.Exit(1)
