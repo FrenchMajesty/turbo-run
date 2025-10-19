@@ -228,7 +228,7 @@ func (w *WorkNode) wrapWithRetry(workFn WorkNodeExecutableFunc) WorkNodeExecutab
 				// Emit retry event
 				turboRun, err := GetTurboRun()
 				if err == nil {
-					turboRun.emitEvent(EventNodeRetrying, w.ID, map[string]interface{}{
+					turboRun.emitEvent(EventNodeRetrying, w.ID, map[string]any{
 						"attempt":     attempt + 1,
 						"max_retries": w.retryConfig.MaxRetries + 1,
 						"delay":       delay.String(),
@@ -347,7 +347,7 @@ func executeStandardGroqRequest(w *WorkNode, groq *groq.GroqClientInterface, ope
 	// Emit running event
 	turboRun, err := GetTurboRun()
 	if err == nil {
-		turboRun.emitEvent(EventNodeRunning, w.ID, map[string]interface{}{
+		turboRun.emitEvent(EventNodeRunning, w.ID, map[string]any{
 			"provider": "groq",
 		})
 	}

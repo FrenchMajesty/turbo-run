@@ -37,10 +37,10 @@ const (
 )
 
 type Event struct {
-	Type      EventType              `json:"type"`
-	NodeID    string                 `json:"node_id"`
-	Timestamp time.Time              `json:"timestamp"`
-	Data      map[string]interface{} `json:"data,omitempty"`
+	Type      EventType      `json:"type"`
+	NodeID    string         `json:"node_id"`
+	Timestamp time.Time      `json:"timestamp"`
+	Data      map[string]any `json:"data,omitempty"`
 }
 
 type TurboRun struct {
@@ -57,8 +57,8 @@ type TurboRun struct {
 	workerStateChan chan int
 
 	// Misc
-	mu     sync.RWMutex      // protects launchedCount and stats reading
-	logger logger.Logger     // pluggable logger
+	mu     sync.RWMutex  // protects launchedCount and stats reading
+	logger logger.Logger // pluggable logger
 
 	// Stats attributes
 	uniqueID       string
@@ -202,7 +202,7 @@ func (tr *TurboRun) GetEventChan() <-chan *Event {
 }
 
 // emitEvent sends an event to the event channel (non-blocking)
-func (tr *TurboRun) emitEvent(eventType EventType, nodeID uuid.UUID, data map[string]interface{}) {
+func (tr *TurboRun) emitEvent(eventType EventType, nodeID uuid.UUID, data map[string]any) {
 	if tr.eventChan == nil {
 		return
 	}
@@ -232,7 +232,7 @@ func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
 	tr.graph.Add(workNode, []uuid.UUID{})
 
 	// Emit node created event
-	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]interface{}{
+	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]any{
 		"dependencies":     []string{},
 		"estimated_tokens": workNode.GetEstimatedTokens(),
 		"provider":         string(workNode.GetProvider()),
@@ -257,7 +257,7 @@ func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid
 	}
 
 	// Emit node created event
-	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]interface{}{
+	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]any{
 		"dependencies":     depStrings,
 		"estimated_tokens": workNode.GetEstimatedTokens(),
 		"provider":         string(workNode.GetProvider()),
@@ -303,7 +303,7 @@ func (tr *TurboRun) listenForReadyNodes() {
 
 		case node := <-tr.graph.readyNodesChan:
 			// Emit node ready event
-			tr.emitEvent(EventNodeReady, node.ID, map[string]interface{}{
+			tr.emitEvent(EventNodeReady, node.ID, map[string]any{
 				"estimated_tokens": node.GetEstimatedTokens(),
 			})
 
@@ -313,7 +313,7 @@ func (tr *TurboRun) listenForReadyNodes() {
 			})
 
 			// Emit node prioritized event
-			tr.emitEvent(EventNodePrioritized, node.ID, map[string]interface{}{
+			tr.emitEvent(EventNodePrioritized, node.ID, map[string]any{
 				"priority":   node.GetEstimatedTokens(),
 				"queue_size": tr.priorityQueue.Size(),
 			})
@@ -351,7 +351,7 @@ func (tr *TurboRun) listenForLaunchPad() {
 				// Emit blocking event only once per node
 				if !blocked {
 					blocked = true
-					tr.emitEvent(EventBudgetBlocked, node.ID, map[string]interface{}{
+					tr.emitEvent(EventBudgetBlocked, node.ID, map[string]any{
 						"provider":           providerName(node.GetProvider()),
 						"needed_tokens":      node.GetEstimatedTokens(),
 						"available_tokens":   tokensBudget,
@@ -379,7 +379,7 @@ func (tr *TurboRun) listenForLaunchPad() {
 			totalTokens := tr.getBudgetTotal(node.GetProvider())
 			utilizationPct := float64(totalTokens-tokensAvailable) / float64(totalTokens) * 100
 
-			tr.emitEvent(EventBudgetConsumed, uuid.Nil, map[string]interface{}{
+			tr.emitEvent(EventBudgetConsumed, uuid.Nil, map[string]any{
 				"provider":           providerName(node.GetProvider()),
 				"tokens_consumed":    node.GetEstimatedTokens(),
 				"tokens_available":   tokensAvailable,
@@ -390,7 +390,7 @@ func (tr *TurboRun) listenForLaunchPad() {
 
 			// Emit budget warning if utilization is high
 			if utilizationPct >= 80 {
-				tr.emitEvent(EventBudgetWarning, uuid.Nil, map[string]interface{}{
+				tr.emitEvent(EventBudgetWarning, uuid.Nil, map[string]any{
 					"provider":         providerName(node.GetProvider()),
 					"utilization_pct":  utilizationPct,
 					"tokens_available": tokensAvailable,
@@ -398,7 +398,7 @@ func (tr *TurboRun) listenForLaunchPad() {
 			}
 
 			// Emit node dispatched event
-			tr.emitEvent(EventNodeDispatched, node.ID, map[string]interface{}{
+			tr.emitEvent(EventNodeDispatched, node.ID, map[string]any{
 				"worker_pool_busy": tr.workersPool.GetBusyWorkers(),
 				"worker_pool_size": tr.workersPool.GetWorkerCount(),
 			})
@@ -418,7 +418,7 @@ func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 	node.AddResultCallback(func(result RunResult) {
 		// Emit completion or failure event
 		if result.Error != nil {
-			tr.emitEvent(EventNodeFailed, node.ID, map[string]interface{}{
+			tr.emitEvent(EventNodeFailed, node.ID, map[string]any{
 				"error":    result.Error.Error(),
 				"duration": result.Duration.String(),
 			})
@@ -426,7 +426,7 @@ func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 			tr.failedCount++
 			tr.mu.Unlock()
 		} else {
-			tr.emitEvent(EventNodeCompleted, node.ID, map[string]interface{}{
+			tr.emitEvent(EventNodeCompleted, node.ID, map[string]any{
 				"duration":    result.Duration.String(),
 				"tokens_used": result.TokensUsed,
 			})
@@ -449,7 +449,7 @@ func (tr *TurboRun) listenForWorkerStateChanges() {
 			// Worker state changed, broadcast updated stats
 			// The actual broadcasting will be handled by the server via GetStats()
 			// We just need to trigger a stats update event
-			tr.emitEvent("worker_state_changed", uuid.Nil, map[string]interface{}{
+			tr.emitEvent("worker_state_changed", uuid.Nil, map[string]any{
 				"workers_busy": tr.workersPool.GetBusyWorkers(),
 			})
 		}
@@ -486,7 +486,7 @@ func (tr *TurboRun) onMinuteChange() {
 	tr.tracker.Cycle()
 
 	// Emit budget reset event
-	tr.emitEvent(EventBudgetReset, uuid.Nil, map[string]interface{}{
+	tr.emitEvent(EventBudgetReset, uuid.Nil, map[string]any{
 		"timestamp": time.Now().Format(time.RFC3339),
 		"providers": []string{"groq", "openai"},
 	})

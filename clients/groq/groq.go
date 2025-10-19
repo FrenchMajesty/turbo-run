@@ -154,7 +154,7 @@ func (c *GroqClient) ChatCompletion(ctx context.Context, req ChatCompletionReque
 	}
 
 	// Define the retryable function
-	retryableFn := func(attempt int) (interface{}, int, []byte, error) {
+	retryableFn := func(attempt int) (any, int, []byte, error) {
 		body, err := json.Marshal(req)
 		if err != nil {
 			return nil, 0, nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -233,14 +233,14 @@ func saveResponseToFile(model string, req ChatCompletionRequest, bodyBytes []byt
 	}
 
 	// Parse response body as JSON
-	var responseBody interface{}
+	var responseBody any
 	if err := json.Unmarshal(bodyBytes, &responseBody); err != nil {
 		log.Printf("Error parsing response body as JSON: %v", err)
 		return
 	}
 
 	// Create a response object to save
-	responseData := map[string]interface{}{
+	responseData := map[string]any{
 		"request":  req,
 		"response": responseBody,
 		"status":   statusCode,
@@ -283,7 +283,7 @@ func (c *GroqClient) ChatCompletionStream(ctx context.Context, req ChatCompletio
 	var firstTokenTime *time.Time
 
 	// Define the retryable function
-	retryableFn := func(attempt int) (interface{}, int, []byte, error) {
+	retryableFn := func(attempt int) (any, int, []byte, error) {
 		// Reset timing for each retry attempt
 		requestStartTime = time.Now()
 		firstTokenTime = nil

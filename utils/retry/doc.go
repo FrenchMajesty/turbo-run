@@ -20,7 +20,7 @@
 //	    APIName: "MyAPI",
 //	}
 //
-//	result, err := retry.Execute(ctx, opts, func(attempt int) (interface{}, int, []byte, error) {
+//	result, err := retry.Execute(ctx, opts, func(attempt int) (any, int, []byte, error) {
 //	    // Your retryable operation here
 //	    resp, err := makeAPICall()
 //	    return resp, statusCode, responseBody, err

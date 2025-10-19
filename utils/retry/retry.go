@@ -28,10 +28,10 @@ func DefaultConfig() Config {
 type ErrorChecker func(err error, statusCode int, responseBody []byte) bool
 
 // RetryableFunc defines a function that can be retried
-type RetryableFunc func(attempt int) (result interface{}, statusCode int, responseBody []byte, err error)
+type RetryableFunc func(attempt int) (result any, statusCode int, responseBody []byte, err error)
 
 // Logger defines a function for logging retry attempts
-type Logger func(message string, args ...interface{})
+type Logger func(message string, args ...any)
 
 // Options configures retry behavior
 type Options struct {
@@ -51,7 +51,7 @@ func (c Config) calculateDelay(attempt int) time.Duration {
 }
 
 // Execute performs the retryable function with the configured retry logic
-func Execute(ctx context.Context, opts Options, fn RetryableFunc) (interface{}, error) {
+func Execute(ctx context.Context, opts Options, fn RetryableFunc) (any, error) {
 	var lastErr error
 	var lastStatusCode int
 	var lastResponseBody []byte

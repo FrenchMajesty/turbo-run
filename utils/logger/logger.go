@@ -10,7 +10,7 @@ import (
 // All implementations must be safe for concurrent use across multiple goroutines.
 type Logger interface {
 	// Printf logs a formatted message
-	Printf(format string, args ...interface{})
+	Printf(format string, args ...any)
 	// Println logs a message with a newline
 	Println(message string)
 }
@@ -28,7 +28,7 @@ func NewStdoutLogger() *StdoutLogger {
 	}
 }
 
-func (s *StdoutLogger) Printf(format string, args ...interface{}) {
+func (s *StdoutLogger) Printf(format string, args ...any) {
 	s.logger.Printf(format, args...)
 }
 
@@ -60,7 +60,7 @@ func NewFileLogger(filepath string) (*FileLogger, error) {
 	}, nil
 }
 
-func (f *FileLogger) Printf(format string, args ...interface{}) {
+func (f *FileLogger) Printf(format string, args ...any) {
 	f.logger.Printf(format, args...)
 }
 
@@ -85,7 +85,7 @@ func NewNoopLogger() *NoopLogger {
 	return &NoopLogger{}
 }
 
-func (n *NoopLogger) Printf(format string, args ...interface{}) {
+func (n *NoopLogger) Printf(format string, args ...any) {
 	// Discard
 }
 
@@ -106,7 +106,7 @@ func NewMultiLogger(loggers ...Logger) *MultiLogger {
 	}
 }
 
-func (m *MultiLogger) Printf(format string, args ...interface{}) {
+func (m *MultiLogger) Printf(format string, args ...any) {
 	for _, logger := range m.loggers {
 		logger.Printf(format, args...)
 	}
@@ -131,7 +131,7 @@ func NewWriterLogger(w io.Writer) *WriterLogger {
 	}
 }
 
-func (w *WriterLogger) Printf(format string, args ...interface{}) {
+func (w *WriterLogger) Printf(format string, args ...any) {
 	w.logger.Printf(format, args...)
 }
 
