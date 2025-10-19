@@ -6,7 +6,6 @@ import (
 
 	"github.com/FrenchMajesty/turbo-run/clients/groq"
 	"github.com/FrenchMajesty/turbo-run/rate_limit"
-	"github.com/FrenchMajesty/turbo-run/rate_limit/backends/memory"
 )
 
 type usageData struct {
@@ -54,11 +53,6 @@ type ConsumptionTrackerStats struct {
 }
 
 func NewConsumptionTracker(backend rate_limit.Backend) *consumptionTracker {
-	// Use in-memory backend as fallback if none provided
-	if backend == nil {
-		backend = memory.NewBackend()
-	}
-
 	return &consumptionTracker{
 		current:              make(map[groq.Provider]usageData),
 		total:                make(map[groq.Provider]usageData),
