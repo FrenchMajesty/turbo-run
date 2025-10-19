@@ -34,6 +34,10 @@ const (
 	EventBudgetBlocked  EventType = "budget_blocked"
 	EventBudgetReset    EventType = "budget_reset"
 	EventBudgetWarning  EventType = "budget_warning"
+
+	// Graph capacity events
+	EventGraphFull    EventType = "graph_full"
+	EventGraphResumed EventType = "graph_resumed"
 )
 
 type Event struct {
@@ -41,6 +45,12 @@ type Event struct {
 	NodeID    string         `json:"node_id"`
 	Timestamp time.Time      `json:"timestamp"`
 	Data      map[string]any `json:"data,omitempty"`
+}
+
+// pushRequest represents a request to add a node to the graph
+type pushRequest struct {
+	node         *WorkNode
+	dependencies []uuid.UUID
 }
 
 type TurboRun struct {
@@ -51,14 +61,18 @@ type TurboRun struct {
 	workersPool   *workerPool
 
 	// Channels
-	quit            chan struct{}
-	launchpad       chan struct{}
-	eventChan       chan *Event
-	workerStateChan chan int
+	quit               chan struct{}
+	launchpad          chan struct{}
+	eventChan          chan *Event
+	workerStateChan    chan int
+	pushChan           chan *pushRequest // buffered channel for incoming graph nodes
+	graphSpaceNotify   chan struct{}     // signals when graph space becomes available
 
 	// Misc
-	mu     sync.RWMutex  // protects launchedCount and stats reading
-	logger logger.Logger // pluggable logger
+	mu           sync.RWMutex   // protects launchedCount and stats reading
+	wg           sync.WaitGroup // tracks goroutines for graceful shutdown
+	logger       logger.Logger  // pluggable logger
+	maxGraphSize int            // 0 = unlimited
 
 	// Stats attributes
 	uniqueID       string
@@ -72,6 +86,7 @@ type TurboRunStats struct {
 	GraphSize         int
 	PriorityQueueSize int
 	LaunchpadSize     int
+	PushQueueSize     int
 	LaunchedCount     int
 	CompletedCount    int
 	FailedCount       int
@@ -90,6 +105,15 @@ type TurboRunOption func(*TurboRun)
 func WithLogger(l logger.Logger) TurboRunOption {
 	return func(tr *TurboRun) {
 		tr.logger = l
+	}
+}
+
+// WithMaxGraphSize sets the maximum number of nodes allowed in the graph.
+// When the graph is full, Push() will block until nodes complete.
+// A value of 0 means unlimited (default).
+func WithMaxGraphSize(size int) TurboRunOption {
+	return func(tr *TurboRun) {
+		tr.maxGraphSize = size
 	}
 }
 
@@ -121,22 +145,32 @@ func NewTurboRunWithBackend(
 		workerStateChan := make(chan int, 100)
 
 		instance = &TurboRun{
-			uniqueID:        uniqueID,
-			graph:           NewGraph(),
-			priorityQueue:   priority_queue.NewMaxPriorityQueue[*WorkNode](),
-			tracker:         NewConsumptionTracker(backend),
-			quit:            make(chan struct{}),
-			launchpad:       make(chan struct{}, 100),
-			eventChan:       make(chan *Event, 1000),
-			workerStateChan: workerStateChan,
-			logger:          logger.NewStdoutLogger(), // Default to stdout
-			startTime:       time.Now(),
+			uniqueID:         uniqueID,
+			graph:            NewGraph(),
+			priorityQueue:    priority_queue.NewMaxPriorityQueue[*WorkNode](),
+			tracker:          NewConsumptionTracker(backend),
+			quit:             make(chan struct{}),
+			launchpad:        make(chan struct{}, 100),
+			eventChan:        make(chan *Event, 1000),
+			workerStateChan:  workerStateChan,
+			graphSpaceNotify: make(chan struct{}, 1), // Buffered to prevent blocking
+			logger:           logger.NewStdoutLogger(), // Default to stdout
+			maxGraphSize:     0,                        // Default unlimited
+			startTime:        time.Now(),
 		}
 
-		// Apply functional options
+		// Apply functional options (may set maxGraphSize)
 		for _, opt := range opts {
 			opt(instance)
 		}
+
+		// Calculate push channel buffer size
+		// Use maxGraphSize as buffer, or default to 1000 if unlimited
+		pushBufferSize := instance.maxGraphSize
+		if pushBufferSize == 0 {
+			pushBufferSize = 1000 // Default buffer for unlimited graphs
+		}
+		instance.pushChan = make(chan *pushRequest, pushBufferSize)
 
 		instance.workersPool = NewWorkerPool(120, &groq, openai, workerStateChan)
 
@@ -164,36 +198,61 @@ func GetTurboRun() (*TurboRun, error) {
 
 // Start starts the turbo runner
 func (tr *TurboRun) Start() {
-	go instance.listenForReadyNodes()
-	go instance.listenForLaunchPad()
-	go instance.startMinuteTimer()
-	go instance.listenForWorkerStateChanges()
+	// Start core goroutines with WaitGroup tracking
+	tr.wg.Add(5)
+	go func() {
+		defer tr.wg.Done()
+		instance.listenForReadyNodes()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.listenForLaunchPad()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.startMinuteTimer()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.listenForWorkerStateChanges()
+	}()
+	go func() {
+		defer tr.wg.Done()
+		instance.listenForPushRequests()
+	}()
 
 	// Start analytics logging if in dev or testing environment
 	env := os.Getenv("ENV")
 	if env == "dev" || env == "testing" {
-		go instance.startAnalyticsLogger()
+		tr.wg.Add(1)
+		go func() {
+			defer tr.wg.Done()
+			instance.startAnalyticsLogger()
+		}()
 	}
 
 	time.Sleep(10 * time.Millisecond) // give time for the goroutines to start
 }
 
-// Stop stops the turbo runner
+// Stop stops the turbo runner gracefully
 func (tr *TurboRun) Stop() {
+	// Stop worker pool first
 	tr.workersPool.Stop()
+
 	close(tr.quit)
 
-	// Log shutdown
-	tr.logger.Printf("TurboRun %s: Shutting down", tr.uniqueID)
+	tr.wg.Wait()
 
-	// Close file logger if it's a FileLogger
-	if fileLogger, ok := tr.logger.(*logger.FileLogger); ok {
-		fileLogger.Close()
+	if tr.pushChan != nil {
+		close(tr.pushChan)
 	}
 
 	if tr.eventChan != nil {
 		close(tr.eventChan)
 	}
+
+	tr.logger.Printf("TurboRun %s: Shutting down", tr.uniqueID)
+	tr.logger.Close()
 }
 
 // GetEventChan returns the event channel for external listeners
@@ -222,46 +281,42 @@ func (tr *TurboRun) emitEvent(eventType EventType, nodeID uuid.UUID, data map[st
 	}
 }
 
-// Push adds a work node to the graph with no dependencies
+// Push adds a work node to the graph with no dependencies.
+// This will block if the graph is at max capacity (configured via WithMaxGraphSize).
 func (tr *TurboRun) Push(workNode *WorkNode) *TurboRun {
-	// Set logger on the WorkNode if it doesn't have one
-	if _, ok := workNode.logger.(*logger.NoopLogger); workNode.logger == nil || ok {
+	if workNode.logger == nil || workNode.logger.Type() == logger.LoggerTypeNoop {
 		workNode.SetLogger(tr.logger)
 	}
 
-	tr.graph.Add(workNode, []uuid.UUID{})
+	// Send to push channel (blocks if channel is full - natural backpressure)
+	tr.pushChan <- &pushRequest{
+		node:         workNode,
+		dependencies: []uuid.UUID{},
+	}
 
-	// Emit node created event
-	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]any{
-		"dependencies":     []string{},
-		"estimated_tokens": workNode.GetEstimatedTokens(),
-		"provider":         string(workNode.GetProvider()),
-	})
+	// Small sleep to allow async processing to complete
+	// This maintains quasi-synchronous behavior for tests
+	time.Sleep(1 * time.Millisecond)
 
 	return tr
 }
 
-// PushWithDependencies adds a work node to the graph with dependencies
+// PushWithDependencies adds a work node to the graph with dependencies.
+// This will block if the graph is at max capacity (configured via WithMaxGraphSize).
 func (tr *TurboRun) PushWithDependencies(workNode *WorkNode, dependencies []uuid.UUID) *TurboRun {
-	// Set logger on the WorkNode if it doesn't have one
-	if _, ok := workNode.logger.(*logger.NoopLogger); workNode.logger == nil || ok {
+	if workNode.logger == nil || workNode.logger.Type() == logger.LoggerTypeNoop {
 		workNode.SetLogger(tr.logger)
 	}
 
-	tr.graph.Add(workNode, dependencies)
-
-	// Convert dependencies to strings for JSON
-	depStrings := make([]string, len(dependencies))
-	for i, dep := range dependencies {
-		depStrings[i] = dep.String()
+	// Send to push channel (blocks if channel is full - natural backpressure)
+	tr.pushChan <- &pushRequest{
+		node:         workNode,
+		dependencies: dependencies,
 	}
 
-	// Emit node created event
-	tr.emitEvent(EventNodeCreated, workNode.ID, map[string]any{
-		"dependencies":     depStrings,
-		"estimated_tokens": workNode.GetEstimatedTokens(),
-		"provider":         string(workNode.GetProvider()),
-	})
+	// Small sleep to allow async processing to complete
+	// This maintains quasi-synchronous behavior for tests
+	time.Sleep(1 * time.Millisecond)
 
 	return tr
 }
@@ -285,6 +340,7 @@ func (tr *TurboRun) GetStats() *TurboRunStats {
 		GraphSize:         tr.graph.Size(),
 		PriorityQueueSize: tr.priorityQueue.Size(),
 		LaunchpadSize:     len(tr.launchpad),
+		PushQueueSize:     len(tr.pushChan),
 		LaunchedCount:     tr.launchedCount,
 		CompletedCount:    tr.completedCount,
 		FailedCount:       tr.failedCount,
@@ -436,6 +492,14 @@ func (tr *TurboRun) removeNodeFromGraphOnCompletion(node *WorkNode) {
 		}
 
 		tr.graph.Remove(node.ID)
+
+		// Notify waiting goroutines that graph space is available
+		// Non-blocking send to avoid blocking the callback
+		select {
+		case tr.graphSpaceNotify <- struct{}{}:
+		default:
+			// Channel full or no one waiting, that's fine
+		}
 	})
 }
 
@@ -456,6 +520,75 @@ func (tr *TurboRun) listenForWorkerStateChanges() {
 	}
 }
 
+// listenForPushRequests processes incoming push requests and adds nodes to the graph
+// with backpressure control based on maxGraphSize
+func (tr *TurboRun) listenForPushRequests() {
+	var blocked bool
+
+	for {
+		select {
+		case <-tr.quit:
+			return
+
+		case req := <-tr.pushChan:
+			// Wait if graph is at max capacity (event-driven, no polling)
+			for tr.maxGraphSize > 0 && tr.graph.Size() >= tr.maxGraphSize {
+				if !blocked {
+					blocked = true
+					tr.logger.Printf("TurboRun %s: Graph at max capacity (%d/%d), waiting for nodes to complete...",
+						tr.uniqueID, tr.graph.Size(), tr.maxGraphSize)
+					tr.emitEvent(EventGraphFull, uuid.Nil, map[string]any{
+						"graph_size": tr.graph.Size(),
+						"max_size":   tr.maxGraphSize,
+					})
+				}
+
+				// Wait for notification that space is available
+				select {
+				case <-tr.graphSpaceNotify:
+					// Space might be available, loop will check again
+				case <-tr.quit:
+					return // Shutdown during wait
+				}
+			}
+
+			// Log resume if we were blocked
+			if blocked {
+				blocked = false
+				tr.logger.Printf("TurboRun %s: Graph has space, resuming (%d/%d)",
+					tr.uniqueID, tr.graph.Size(), tr.maxGraphSize)
+				tr.emitEvent(EventGraphResumed, uuid.Nil, map[string]any{
+					"graph_size": tr.graph.Size(),
+					"max_size":   tr.maxGraphSize,
+				})
+			}
+
+			// Add to graph
+			tr.graph.Add(req.node, req.dependencies)
+
+			// Emit node created event
+			if len(req.dependencies) == 0 {
+				tr.emitEvent(EventNodeCreated, req.node.ID, map[string]any{
+					"dependencies":     []string{},
+					"estimated_tokens": req.node.GetEstimatedTokens(),
+					"provider":         string(req.node.GetProvider()),
+				})
+			} else {
+				// Convert dependencies to strings for JSON
+				depStrings := make([]string, len(req.dependencies))
+				for i, dep := range req.dependencies {
+					depStrings[i] = dep.String()
+				}
+				tr.emitEvent(EventNodeCreated, req.node.ID, map[string]any{
+					"dependencies":     depStrings,
+					"estimated_tokens": req.node.GetEstimatedTokens(),
+					"provider":         string(req.node.GetProvider()),
+				})
+			}
+		}
+	}
+}
+
 // startMinuteTimer starts a timer that will call onMinuteChange every minute
 func (tr *TurboRun) startMinuteTimer() {
 	// Calculate time until next minute boundary
@@ -463,22 +596,26 @@ func (tr *TurboRun) startMinuteTimer() {
 	nextMinute := now.Truncate(time.Minute).Add(time.Minute)
 	timeUntilNextMinute := nextMinute.Sub(now)
 
-	// Wait until next minute boundary
-	time.Sleep(timeUntilNextMinute)
+	// Wait until next minute boundary (with quit check)
+	select {
+	case <-tr.quit:
+		return // Shutdown before first tick
+	case <-time.After(timeUntilNextMinute):
+		// Continue to ticker
+	}
 
 	// Now start ticker for every minute
 	ticker := time.NewTicker(time.Minute)
-	go func() {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-tr.quit:
-				return // Shutdown signal
-			case <-ticker.C:
-				tr.onMinuteChange()
-			}
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-tr.quit:
+			return // Shutdown signal
+		case <-ticker.C:
+			tr.onMinuteChange()
 		}
-	}()
+	}
 }
 
 // onMinuteChange is called when the minute changes
@@ -547,9 +684,9 @@ func (tr *TurboRun) logStats(shutdown bool) {
 // formatTokens formats token counts in a human-readable way
 func formatTokens(tokens int) string {
 	if tokens >= 1000000 {
-		return fmt.Sprintf("%.1fM", float64(tokens)/1000000)
+		return fmt.Sprintf("%.1fM", float64(tokens)/1_000_000)
 	} else if tokens >= 1000 {
-		return fmt.Sprintf("%.1fK", float64(tokens)/1000)
+		return fmt.Sprintf("%.1fK", float64(tokens)/1_000)
 	}
 	return fmt.Sprintf("%d", tokens)
 }
