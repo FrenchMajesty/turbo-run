@@ -29,6 +29,16 @@ const nodeTypes: NodeTypes = {
   workNode: WorkNodeComponent,
 };
 
+// Suppress benign ResizeObserver errors from ReactFlow
+if (typeof window !== 'undefined') {
+  const resizeObserverErrorHandler = (e: ErrorEvent) => {
+    if (e.message === 'ResizeObserver loop completed with undelivered notifications.') {
+      e.stopImmediatePropagation();
+    }
+  };
+  window.addEventListener('error', resizeObserverErrorHandler);
+}
+
 const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ className, nodes }) => {
   const reactFlowInstance = useReactFlow();
   const hasInitialized = useRef(false);
