@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { NodeData } from '../../types/NodeData';
 import { WorkNodeCard } from '../WorkNode/WorkNodeCard';
 import './style.css';
@@ -18,12 +19,26 @@ export const PriorityQueue: React.FC<PriorityQueueProps> = ({ className = '', no
                     <div className="emptyMessage">Queue is empty</div>
                 ) : (
                     <div className="flex flex-row gap-4 no-wrap min-w-min">
-                        {nodeIds.map((nodeId, index) => {
-                            const node = nodes.get(nodeId);
-                            return node ? (
-                                <WorkNodeCard key={`${nodeId}-${index}`} node={node} />
-                            ) : null;
-                        })}
+                        <AnimatePresence mode="popLayout">
+                            {nodeIds.map((nodeId, index) => {
+                                const node = nodes.get(nodeId);
+                                return node ? (
+                                    <motion.div
+                                        key={nodeId}
+                                        initial={{ x: -100, opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        exit={{ x: 100, opacity: 0 }}
+                                        transition={{
+                                            duration: 0.3,
+                                            ease: 'easeInOut'
+                                        }}
+                                        layout
+                                    >
+                                        <WorkNodeCard node={node} />
+                                    </motion.div>
+                                ) : null;
+                            })}
+                        </AnimatePresence>
                     </div>
                 )}
             </div>

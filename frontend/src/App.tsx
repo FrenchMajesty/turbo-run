@@ -5,6 +5,7 @@ import { useWorkersStore } from './stores/useWorkersStore';
 import { useQueueStore } from './stores/useQueueStore';
 import { useStatsStore } from './stores/useStatsStore';
 import { useWebSocketSync } from './hooks/useWebSocketSync';
+import { useAnimationOrchestrator } from './hooks/useAnimationOrchestrator';
 import { Header } from './components/Header';
 import { StatsDashboard } from './components/StatsDashboard';
 import { GraphCanvas } from './components/GraphCanvas/GraphCanvas';
@@ -27,6 +28,9 @@ function App() {
 
   // Sync WebSocket events to stores
   useWebSocketSync();
+
+  // Start animation orchestrator
+  useAnimationOrchestrator();
 
   // Initialize WebSocket on mount
   useEffect(() => {

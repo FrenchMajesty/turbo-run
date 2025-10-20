@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { motion } from 'framer-motion';
 import { NodeData } from '../../types/NodeData';
 import { WorkNodeCard } from '../WorkNode/WorkNodeCard';
 import { Handle, Position } from '@xyflow/react';
@@ -8,7 +9,15 @@ import { Handle, Position } from '@xyflow/react';
 export const WorkNodeComponent = memo(
     ({ data }: { data: NodeData }) => {
         return (
-            <div style={{ width: '97px', height: '75px', position: 'relative' }}>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{
+                    duration: 0.3,
+                    ease: 'easeInOut'
+                }}
+                style={{ width: '97px', height: '75px', position: 'relative' }}
+            >
                 <Handle
                     type="target"
                     position={Position.Left}
@@ -20,7 +29,7 @@ export const WorkNodeComponent = memo(
                     position={Position.Right}
                     style={{ opacity: 0, pointerEvents: 'none' }}
                 />
-            </div>
+            </motion.div>
         );
     },
     (prevProps, nextProps) => {

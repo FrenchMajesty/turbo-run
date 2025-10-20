@@ -6,18 +6,46 @@ import { useQueueStore } from '../stores/useQueueStore';
 import { useStatsStore } from '../stores/useStatsStore';
 import { useUIStore } from '../stores/useUIStore';
 import { useEventsStore } from '../stores/useEventsStore';
-import { TurboEvent } from '../types/TurboEvent';
+import { useAnimationQueueStore, ComponentType, QueuedAnimation } from '../stores/useAnimationQueueStore';
+import { TurboEvent, EventType } from '../types/TurboEvent';
 import { Stats } from '../types/Stats';
+
+const DEFAULT_ANIMATION_DURATION = 300; // ms
+
+/**
+ * Maps event types to their target component for animation
+ */
+const getComponentForEvent = (eventType: EventType): ComponentType => {
+  switch (eventType) {
+    case 'priority_queue_add':
+    case 'priority_queue_remove':
+      return 'priority_queue';
+
+    case 'node_running':
+    case 'node_completed':
+    case 'node_failed':
+      return 'worker_grid';
+
+    case 'node_created':
+    case 'node_ready':
+    case 'node_prioritized':
+    case 'node_dispatched':
+    case 'node_retrying':
+    default:
+      return 'graph';
+  }
+};
 
 export const useWebSocketSync = () => {
   const socket = useWebSocketStore((state) => state.socket);
 
-  const { addNode, updateNode, deleteNode, clearNodes } = useNodesStore();
-  const { assignWorker, releaseWorker, clearWorkers } = useWorkersStore();
-  const { addToQueue, removeFromQueue, setQueue, clearQueue } = useQueueStore();
+  const { clearNodes } = useNodesStore();
+  const { clearWorkers } = useWorkersStore();
+  const { setQueue, clearQueue } = useQueueStore();
   const { setStats } = useStatsStore();
   const { setIsPreparing, setIsGraphPrepared, setIsProcessing, resetUI } = useUIStore();
   const { addEvent, clearEvents } = useEventsStore();
+  const { enqueueAnimation, clearQueues } = useAnimationQueueStore();
 
   useEffect(() => {
     if (!socket) return;
@@ -27,56 +55,23 @@ export const useWebSocketSync = () => {
       const event: TurboEvent = JSON.parse(data);
       const nodeId = event.node_id;
       const type = event.type;
-      const eventData = event.data || {};
 
-      // Add to event log
+      // Add to event log (immediate, no animation needed)
       addEvent(event);
 
-      // Handle priority queue events
-      if (type === 'priority_queue_add') {
-        addToQueue(nodeId);
-        return;
-      }
+      // Route event through animation queue instead of direct store updates
+      const component = getComponentForEvent(type);
 
-      if (type === 'priority_queue_remove') {
-        removeFromQueue(nodeId);
-        return;
-      }
+      const queuedAnimation: QueuedAnimation = {
+        id: `${nodeId}-${type}-${Date.now()}`, // Unique animation ID
+        nodeId,
+        event,
+        component,
+        timestamp: Date.now(),
+        duration: DEFAULT_ANIMATION_DURATION,
+      };
 
-      // Handle worker state changes
-      if (type === 'node_running' && eventData.worker_id !== undefined) {
-        assignWorker(eventData.worker_id, nodeId);
-      }
-
-      // Clear worker state when node completes or fails
-      if (type === 'node_completed' || type === 'node_failed') {
-        releaseWorker(nodeId);
-      }
-
-      // Update or add node
-      const existingNode = useNodesStore.getState().getNode(nodeId);
-      if (!existingNode) {
-        addNode(nodeId, {
-          id: nodeId,
-          status: type,
-          dependencies: eventData.dependencies || [],
-          provider: eventData.provider || 'unknown',
-          tokens: eventData.estimated_tokens || 0,
-          data: eventData,
-        });
-      } else {
-        updateNode(nodeId, {
-          status: type,
-          data: eventData,
-        });
-      }
-
-      // Auto-remove completed nodes after 3 seconds
-      if (type === 'node_completed') {
-        setTimeout(() => {
-          deleteNode(nodeId);
-        }, 3000);
-      }
+      enqueueAnimation(queuedAnimation);
     };
 
     // Handle stats updates
@@ -122,6 +117,7 @@ export const useWebSocketSync = () => {
       clearQueue();
       clearWorkers();
       clearEvents();
+      clearQueues(); // Clear animation queues as well
     };
 
     const handleProcessingStarted = () => {
@@ -156,5 +152,5 @@ export const useWebSocketSync = () => {
       socket.off('processing_started', handleProcessingStarted);
       socket.off('processing_completed', handleProcessingCompleted);
     };
-  }, [socket, addNode, updateNode, deleteNode, clearNodes, assignWorker, releaseWorker, clearWorkers, addToQueue, removeFromQueue, setQueue, clearQueue, setStats, setIsPreparing, setIsGraphPrepared, setIsProcessing, resetUI, addEvent, clearEvents]);
+  }, [socket, clearNodes, clearWorkers, setQueue, clearQueue, setStats, setIsPreparing, setIsGraphPrepared, setIsProcessing, resetUI, addEvent, clearEvents, enqueueAnimation, clearQueues]);
 };

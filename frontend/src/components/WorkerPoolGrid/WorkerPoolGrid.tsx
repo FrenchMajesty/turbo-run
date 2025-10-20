@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { NodeData } from '../../types/NodeData';
 import { WorkNodeCard } from '../WorkNode/WorkNodeCard';
 import './style.css';
@@ -30,14 +31,34 @@ export const WorkerPoolGrid: React.FC<WorkerPoolGridProps> = ({
 
             return (
               <div key={workerId} className="min-h-[100px] flex items-center justify-center">
-                {node ? (
-                  <WorkNodeCard className="!w-full !h-full" node={node} />
-                ) : (
-                  <div className="w-full h-full min-h-[100px] bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 transition-all duration-200 hover:bg-gray-200 hover:border-gray-400">
-                    <span className="text-sm text-gray-500 font-semibold">#{workerId}</span>
-                    <span className="text-xs text-gray-400 uppercase tracking-wide">Idle</span>
-                  </div>
-                )}
+                <AnimatePresence mode="wait">
+                  {node ? (
+                    <motion.div
+                      key={nodeId}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{
+                        duration: 0.3,
+                        ease: 'easeInOut'
+                      }}
+                      className="w-full h-full"
+                    >
+                      <WorkNodeCard className="!w-full !h-full" node={node} />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key={`idle-${workerId}`}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2 }}
+                      className="w-full h-full min-h-[100px] bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 transition-all duration-200 hover:bg-gray-200 hover:border-gray-400"
+                    >
+                      <span className="text-sm text-gray-500 font-semibold">#{workerId}</span>
+                      <span className="text-xs text-gray-400 uppercase tracking-wide">Idle</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
           })}
