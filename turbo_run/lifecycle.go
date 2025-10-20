@@ -183,12 +183,6 @@ func (tr *TurboRun) listenForGraphReadyNodes() {
 				Priority: node.GetEstimatedTokens(),
 			})
 
-			// Emit node prioritized event
-			tr.emitEvent(EventNodePrioritized, node.ID, map[string]any{
-				"priority":   node.GetEstimatedTokens(),
-				"queue_size": tr.priorityQueue.Size(),
-			})
-
 			// Emit priority queue add event
 			tr.emitEvent(EventPriorityQueueAdd, node.ID, map[string]any{})
 

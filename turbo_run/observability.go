@@ -64,6 +64,7 @@ func (tr *TurboRun) emitEvent(eventType EventType, nodeID uuid.UUID, data map[st
 
 	select {
 	case tr.eventChan <- event:
+		fmt.Printf("Event sent: %+v\n", event)
 		// Event sent successfully
 	default:
 		// Channel full, drop event to avoid blocking
@@ -95,47 +96,6 @@ func (tr *TurboRun) GetStats() *TurboRunStats {
 		WorkersPoolBusy:       tr.workersPool.GetBusyWorkers(),
 		WorkerStates:          tr.workersPool.GetWorkerStates(),
 		TrackerStats:          tr.tracker.GetStats(),
-	}
-}
-
-// logStats logs current stats if there's activity
-func (tr *TurboRun) logStats(shutdown bool) {
-	stats := tr.GetStats()
-
-	if shutdown {
-		tr.logger.Printf(
-			"TurboRun %s: Shutting down. Total nodes launched: %d. Total nodes failed: %d. Total tokens used: %s. Requests made: %d. Time taken: %s",
-			tr.uniqueID,
-			stats.LaunchedCount,
-			stats.FailedCount,
-			formatTokens(stats.TrackerStats.TotalTokens),
-			stats.TrackerStats.TotalRequests,
-			time.Since(tr.startTime),
-		)
-		return
-	}
-
-	// Only log if there's actual processing activity (not just queued nodes while paused)
-	// Check if paused - if paused and nothing launched yet, don't log
-	tr.mu.RLock()
-	isPaused := tr.paused
-	tr.mu.RUnlock()
-
-	// Log if: actively processing (not paused) OR workers are busy OR nodes have been launched
-	if (!isPaused && (stats.PriorityQueueSize > 0 || stats.GraphSize > 0)) || stats.WorkersPoolBusy > 0 || stats.LaunchedCount > 0 {
-		trackerStats := stats.TrackerStats
-		tr.logger.Printf("TurboRun %s: Workers(%d/%d) Queue(%d) Graph(%d) Launched(%d) Failed(%d) Tokens(groq:%s openai:%s total:%s)",
-			tr.uniqueID,
-			stats.WorkersPoolBusy,
-			stats.WorkersPoolSize,
-			stats.PriorityQueueSize,
-			stats.GraphSize,
-			stats.LaunchedCount,
-			stats.FailedCount,
-			formatTokens(trackerStats.GroqCurrentTokens),
-			formatTokens(trackerStats.OpenAICurrentTokens),
-			formatTokens(trackerStats.TotalTokens),
-		)
 	}
 }
 
