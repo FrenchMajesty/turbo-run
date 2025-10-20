@@ -35,7 +35,7 @@ export const Header: React.FC = () => {
     <header className="flex flex-col gap-2 py-4 px-0 border-b border-gray-200">
       <h1 className="text-xl font-bold">TurboRun Visualization</h1>
       <div className="flex flex-row gap-2">
-        <Badge variant="default">
+        <Badge variant={isConnected ? 'success' : 'default'}>
           {isConnected ? 'Connected' : 'Disconnected'}
         </Badge>
       </div>

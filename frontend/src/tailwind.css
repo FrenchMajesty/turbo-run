@@ -7,6 +7,10 @@
       "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
+    --color-green-300: oklch(87.1% 0.15 154.449);
+    --color-green-500: oklch(72.3% 0.219 149.579);
+    --color-green-600: oklch(62.7% 0.194 149.214);
+    --color-green-700: oklch(52.7% 0.154 150.069);
     --color-gray-200: oklch(92.8% 0.006 264.531);
     --color-white: #fff;
     --spacing: 0.25rem;
@@ -300,6 +304,9 @@
   .bg-destructive {
     background-color: var(--destructive);
   }
+  .bg-green-500 {
+    background-color: var(--color-green-500);
+  }
   .bg-primary {
     background-color: var(--primary);
   }
@@ -485,6 +492,11 @@
       }
     }
   }
+  .focus-visible\:ring-green-300 {
+    &:focus-visible {
+      --tw-ring-color: var(--color-green-300);
+    }
+  }
   .focus-visible\:ring-ring\/50 {
     &:focus-visible {
       --tw-ring-color: var(--ring);
@@ -586,6 +598,13 @@
       }
     }
   }
+  .dark\:focus-visible\:ring-green-600 {
+    &:is(.dark *) {
+      &:focus-visible {
+        --tw-ring-color: var(--color-green-600);
+      }
+    }
+  }
   .dark\:aria-invalid\:ring-destructive\/40 {
     &:is(.dark *) {
       &[aria-invalid="true"] {
@@ -640,6 +659,15 @@
           @supports (color: color-mix(in lab, red, red)) {
             background-color: color-mix(in oklab, var(--destructive) 90%, transparent);
           }
+        }
+      }
+    }
+  }
+  .\[a\&\]\:hover\:bg-green-700 {
+    a& {
+      &:hover {
+        @media (hover: hover) {
+          background-color: var(--color-green-700);
         }
       }
     }
