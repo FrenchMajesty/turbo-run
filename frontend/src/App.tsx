@@ -36,8 +36,12 @@ function App() {
 
   return (
     <div className="App">
-      <div className="container">
-        <Header />
+      <div className="container flex flex-col gap-8">
+        <Header
+          launchedCount={stats.LaunchedCount}
+          completedCount={stats.CompletedCount}
+          failedCount={stats.FailedCount}
+        />
 
         <StatsDashboard />
 
