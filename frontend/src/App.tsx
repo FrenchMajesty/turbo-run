@@ -49,10 +49,14 @@ function App() {
               workerStates={workerStates}
               nodes={nodes}
               totalWorkers={stats.WorkersPoolSize}
+              className="flex-3"
+            />
+            <PriorityQueue
+              nodeIds={priorityQueueNodes}
+              nodes={nodes}
               className="flex-2"
             />
-            <PriorityQueue nodeIds={priorityQueueNodes} nodes={nodes} className="flex-1" />
-            <GraphCanvas nodes={nodes} className="flex-2" />
+            <GraphCanvas nodes={nodes} className="flex-4" />
           </div>
           <div className="flex flex-row gap-4">
             <EventLog />

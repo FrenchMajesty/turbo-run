@@ -240,6 +240,9 @@
     width: calc(var(--spacing) * 10);
     height: calc(var(--spacing) * 10);
   }
+  .\!h-full {
+    height: 100% !important;
+  }
   .h-8 {
     height: calc(var(--spacing) * 8);
   }
@@ -264,6 +267,9 @@
   .min-h-\[100px\] {
     min-height: 100px;
   }
+  .\!w-full {
+    width: 100% !important;
+  }
   .w-fit {
     width: fit-content;
   }
@@ -281,6 +287,12 @@
   }
   .flex-2 {
     flex: 2;
+  }
+  .flex-3 {
+    flex: 3;
+  }
+  .flex-4 {
+    flex: 4;
   }
   .flex-shrink {
     flex-shrink: 1;

@@ -3,10 +3,11 @@ import { NodeData } from '../../types/NodeData';
 import './style.css';
 
 interface WorkNodeCardProps {
+  className?: string;
   node: NodeData;
 }
 
-export const WorkNodeCard: React.FC<WorkNodeCardProps> = ({ node }) => {
+export const WorkNodeCard: React.FC<WorkNodeCardProps> = ({ className = '', node }) => {
   const getVariant = () => {
     if (node.status === 'node_completed') return 'completed';
     if (node.status === 'node_failed') return 'failed';
@@ -17,7 +18,7 @@ export const WorkNodeCard: React.FC<WorkNodeCardProps> = ({ node }) => {
   const isInProgress = node.status === 'node_running';
 
   return (
-    <div className={`workNodeCard ${getVariant()}`}>
+    <div className={`workNodeCard ${getVariant()} ${className}`}>
       <div className="nodeId">{node.id.substring(0, 8)}</div>
 
       <div className="tokenRow">

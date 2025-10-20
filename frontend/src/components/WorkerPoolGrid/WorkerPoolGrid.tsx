@@ -31,7 +31,7 @@ export const WorkerPoolGrid: React.FC<WorkerPoolGridProps> = ({
             return (
               <div key={workerId} className="min-h-[100px] flex items-center justify-center">
                 {node ? (
-                  <WorkNodeCard node={node} />
+                  <WorkNodeCard className="!w-full !h-full" node={node} />
                 ) : (
                   <div className="w-full h-full min-h-[100px] bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 transition-all duration-200 hover:bg-gray-200 hover:border-gray-400">
                     <span className="text-sm text-gray-500 font-semibold">#{workerId}</span>
