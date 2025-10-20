@@ -2,6 +2,7 @@ import React from 'react';
 import { useWebSocketStore } from '../stores/useWebSocketStore';
 import { useUIStore } from '../stores/useUIStore';
 import styles from '../styles/Header.module.css';
+import { Badge } from '@/components/ui/badge';
 
 export const Header: React.FC = () => {
   const { isConnected, prepareGraph, startProcessing } = useWebSocketStore();
@@ -31,11 +32,13 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className={styles.header}>
-      <h1 className={styles.title}>🚀 TurboRun Real-Time Visualization</h1>
-      <span className={`${styles.connectionStatus} ${isConnected ? styles.connected : styles.disconnected}`}>
-        {isConnected ? 'Connected' : 'Disconnected'}
-      </span>
+    <header className="flex flex-col gap-2 py-4 px-0 border-b border-gray-200">
+      <h1 className="text-xl font-bold">TurboRun Visualization</h1>
+      <div className="flex flex-row gap-2">
+        <Badge variant="default">
+          {isConnected ? 'Connected' : 'Disconnected'}
+        </Badge>
+      </div>
       <button
         className={getPrepareButtonClass()}
         onClick={prepareGraph}
