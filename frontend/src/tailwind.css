@@ -192,6 +192,17 @@
   }
 }
 @layer utilities {
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
   .fixed {
     position: fixed;
   }
@@ -243,6 +254,9 @@
   .\!h-full {
     height: 100% !important;
   }
+  .h-4 {
+    height: calc(var(--spacing) * 4);
+  }
   .h-8 {
     height: calc(var(--spacing) * 8);
   }
@@ -261,6 +275,9 @@
   .h-full {
     height: 100%;
   }
+  .max-h-\[300px\] {
+    max-height: 300px;
+  }
   .max-h-\[600px\] {
     max-height: 600px;
   }
@@ -269,6 +286,9 @@
   }
   .\!w-full {
     width: 100% !important;
+  }
+  .w-4 {
+    width: calc(var(--spacing) * 4);
   }
   .w-\[20vw\] {
     width: 20vw;
@@ -293,6 +313,12 @@
   }
   .max-w-\[30vw\] {
     max-width: 30vw;
+  }
+  .min-w-\[80px\] {
+    min-width: 80px;
+  }
+  .min-w-\[140px\] {
+    min-width: 140px;
   }
   .min-w-min {
     min-width: min-content;
@@ -366,6 +392,9 @@
   .gap-2\.5 {
     gap: calc(var(--spacing) * 2.5);
   }
+  .gap-3 {
+    gap: calc(var(--spacing) * 3);
+  }
   .gap-4 {
     gap: calc(var(--spacing) * 4);
   }
@@ -402,6 +431,9 @@
   .border-dashed {
     --tw-border-style: dashed;
     border-style: dashed;
+  }
+  .border-gray-100 {
+    border-color: var(--color-gray-100);
   }
   .border-gray-200 {
     border-color: var(--color-gray-200);
@@ -472,11 +504,23 @@
   .py-0\.5 {
     padding-block: calc(var(--spacing) * 0.5);
   }
+  .py-1 {
+    padding-block: calc(var(--spacing) * 1);
+  }
   .py-2 {
     padding-block: calc(var(--spacing) * 2);
   }
+  .py-3 {
+    padding-block: calc(var(--spacing) * 3);
+  }
   .py-4 {
     padding-block: calc(var(--spacing) * 4);
+  }
+  .text-center {
+    text-align: center;
+  }
+  .font-mono {
+    font-family: var(--font-mono);
   }
   .text-sm {
     font-size: var(--text-sm);
@@ -579,6 +623,12 @@
   }
   .running {
     animation-play-state: running;
+  }
+  .last\:border-b-0 {
+    &:last-child {
+      border-bottom-style: var(--tw-border-style);
+      border-bottom-width: 0px;
+    }
   }
   .hover\:border-gray-400 {
     &:hover {
