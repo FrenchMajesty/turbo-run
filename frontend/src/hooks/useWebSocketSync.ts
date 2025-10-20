@@ -79,10 +79,9 @@ export const useWebSocketSync = () => {
       const stats: Stats = JSON.parse(data);
       setStats(stats);
 
-      // Update priority queue if snapshot is present
-      if (stats.PriorityQueueSnapshot) {
-        setQueue(stats.PriorityQueueSnapshot);
-      }
+      // Note: We no longer update PriorityQueue from stats snapshots
+      // The PQ is managed exclusively through turbo_events (priority_queue_add/remove)
+      // This ensures all updates go through the animation pipeline
     };
 
     // Handle initial stats
@@ -91,10 +90,9 @@ export const useWebSocketSync = () => {
       console.log('Initial stats:', stats);
       setStats(stats);
 
-      // Update priority queue if snapshot is present
-      if (stats.PriorityQueueSnapshot) {
-        setQueue(stats.PriorityQueueSnapshot);
-      }
+      // Note: We no longer update PriorityQueue from stats snapshots
+      // The PQ is managed exclusively through turbo_events (priority_queue_add/remove)
+      // This ensures all updates go through the animation pipeline
     };
 
     // Handle graph lifecycle events
