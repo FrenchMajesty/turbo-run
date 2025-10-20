@@ -270,6 +270,21 @@
   .\!w-full {
     width: 100% !important;
   }
+  .w-\[20vw\] {
+    width: 20vw;
+  }
+  .w-\[25vw\] {
+    width: 25vw;
+  }
+  .w-\[30vw\] {
+    width: 30vw;
+  }
+  .w-\[40vw\] {
+    width: 40vw;
+  }
+  .w-\[50vw\] {
+    width: 50vw;
+  }
   .w-fit {
     width: fit-content;
   }
@@ -305,6 +320,21 @@
   }
   .resize {
     resize: both;
+  }
+  .grid-cols-\[3fr_2fr_4fr\] {
+    grid-template-columns: 3fr 2fr 4fr;
+  }
+  .grid-cols-\[20\%_20\%_40\%\] {
+    grid-template-columns: 20% 20% 40%;
+  }
+  .grid-cols-\[20vw_30vw_50vw\] {
+    grid-template-columns: 20vw 30vw 50vw;
+  }
+  .grid-cols-\[25vw_25vw_50vw\] {
+    grid-template-columns: 25vw 25vw 50vw;
+  }
+  .grid-cols-\[30vw_30vw_40vw\] {
+    grid-template-columns: 30vw 30vw 40vw;
   }
   .grid-cols-\[repeat\(auto-fill\,minmax\(120px\,1fr\)\)\] {
     grid-template-columns: repeat(auto-fill,minmax(120px,1fr));

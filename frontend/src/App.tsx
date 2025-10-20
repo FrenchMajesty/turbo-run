@@ -44,19 +44,19 @@ function App() {
         />
 
         <div className="flex flex-col gap-4">
-          <div className="flex flex-row gap-4">
+          <div className="grid grid-cols-[25vw_25vw_50vw] gap-4">
             <WorkerPoolGrid
+              className='w-[25vw]'
               workerStates={workerStates}
               nodes={nodes}
               totalWorkers={stats.WorkersPoolSize}
-              className="flex-3"
             />
             <PriorityQueue
+              className='w-[25vw]'
               nodeIds={priorityQueueNodes}
               nodes={nodes}
-              className="flex-2"
             />
-            <GraphCanvas nodes={nodes} className="flex-4" />
+            <GraphCanvas nodes={nodes} className='w-[50vw]' />
           </div>
           <div className="flex flex-row gap-4">
             <EventLog />

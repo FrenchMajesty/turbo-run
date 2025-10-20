@@ -13,7 +13,7 @@ export const PriorityQueue: React.FC<PriorityQueueProps> = ({ className = '', no
     return (
         <div className={`flex flex-col gap-2 ${className}`}>
             <h2 className="font-medium">Priority Queue</h2>
-            <div className="bg-white rounded-lg p-4 max-w-[30vw] border border-gray-300 overflow-x-auto">
+            <div className="bg-white rounded-lg p-4 border border-gray-300 overflow-x-auto">
                 {nodeIds.length === 0 ? (
                     <div className="emptyMessage">Queue is empty</div>
                 ) : (
