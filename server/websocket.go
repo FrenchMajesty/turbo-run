@@ -120,26 +120,10 @@ func PrepareGraph() {
 			// Ensure TurboRun is paused before adding nodes
 			turboRun.Pause()
 
-			// Start periodic stats broadcasting during graph preparation
-			statsTicker := time.NewTicker(200 * time.Millisecond)
-			stopStats := make(chan struct{})
-			go func() {
-				for {
-					select {
-					case <-statsTicker.C:
-						BroadcastStats()
-					case <-stopStats:
-						statsTicker.Stop()
-						return
-					}
-				}
-			}()
-
 			// Generate the workload (adds nodes to graph)
+			// Note: We don't broadcast stats during preparation to avoid
+			// overwhelming the frontend with rapid updates
 			workloadGenerator(turboRun)
-
-			// Stop stats broadcasting
-			close(stopStats)
 
 			mutex.Lock()
 			isGraphPrepared = true
@@ -147,7 +131,7 @@ func PrepareGraph() {
 
 			log.Println("Graph prepared successfully (nodes queued, waiting for start)")
 
-			// Broadcast final stats
+			// Broadcast final stats after graph is fully prepared
 			BroadcastStats()
 
 			// Notify clients that graph is prepared
