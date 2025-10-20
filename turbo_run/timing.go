@@ -41,10 +41,12 @@ func (tr *TurboRun) startMinuteTimer() {
 func (tr *TurboRun) onMinuteChange() {
 	tr.tracker.Cycle()
 
-	// Emit budget reset event
-	tr.emitEvent(EventBudgetReset, uuid.Nil, map[string]any{
-		"providers": []string{"groq", "openai"},
-	})
+	// Only emit budget reset event if there's active work (graph not empty or queue not empty)
+	if tr.graph.Size() > 0 || tr.priorityQueue.Size() > 0 {
+		tr.emitEvent(EventBudgetReset, uuid.Nil, map[string]any{
+			"providers": []string{"groq", "openai"},
+		})
+	}
 }
 
 // getBudgetTotal returns the total token budget for a provider
