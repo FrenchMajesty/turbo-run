@@ -16,8 +16,9 @@ import {
 import { NodeData } from '../../types/NodeData';
 import { WorkNodeCard } from '../WorkNode/WorkNodeCard';
 import { getLayoutedElements } from '../../utils/graphLayout';
-import styles from './GraphCanvas.module.css';
 import { WorkNodeComponent } from './WorkNodeGraphComponent';
+import { useStatsStore } from '@/stores/useStatsStore';
+import './GraphCanvas.module.css';
 
 interface GraphCanvasProps {
   className?: string;
@@ -53,6 +54,7 @@ const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ className, nodes }) => {
     return getLayoutedElements(nodes);
   }, [nodeIdsKey]);
 
+  const stats = useStatsStore((state) => state.stats);
   const [nodesState, setNodes, onNodesChange] = useNodesState(layoutedElements.nodes);
   const [edgesState, setEdges, onEdgesChange] = useEdgesState(layoutedElements.edges);
 
@@ -84,9 +86,9 @@ const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ className, nodes }) => {
   }, [nodes, setNodes]);
 
   return (
-    <div className={`${styles.graphContainer} ${className}`}>
-      <h2>🕸️ Dependency Graph</h2>
-      <div className={styles.reactFlowWrapper}>
+    <div className={`flex flex-col gap-2 ${className}`}>
+      <h2 className="font-medium">🕸️ Dependency Graph ({stats.GraphSize} nodes)</h2>
+      <div className="bg-white rounded-lg border border-gray-300 w-full h-[400px] overflow-hidden">
         <ReactFlow
           nodes={nodesState}
           edges={edgesState}

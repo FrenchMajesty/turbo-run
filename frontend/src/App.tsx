@@ -43,8 +43,6 @@ function App() {
           failedCount={stats.FailedCount}
         />
 
-        <StatsDashboard />
-
         <div className="flex flex-col gap-4">
           <div className="flex flex-row gap-4">
             <WorkerPoolGrid
