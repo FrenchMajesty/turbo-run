@@ -87,7 +87,7 @@ const GraphCanvasInner: React.FC<GraphCanvasProps> = ({ className, nodes }) => {
 
   return (
     <div className={`flex flex-col gap-2 ${className}`}>
-      <h2 className="font-medium">🕸️ Dependency Graph ({stats.GraphSize} nodes)</h2>
+      <h2 className="font-medium">Dependency Graph ({stats.GraphSize} nodes)</h2>
       <div className="bg-white rounded-lg border border-gray-300 w-full h-[400px] overflow-hidden">
         <ReactFlow
           nodes={nodesState}

@@ -44,7 +44,7 @@ function App() {
         />
 
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-[25vw_25vw_50vw] gap-4">
+          <div className="grid grid-cols-[25vw_25vw_auto] gap-4">
             <WorkerPoolGrid
               className='w-[25vw]'
               workerStates={workerStates}
@@ -56,7 +56,7 @@ function App() {
               nodeIds={priorityQueueNodes}
               nodes={nodes}
             />
-            <GraphCanvas nodes={nodes} className='w-[50vw]' />
+            <GraphCanvas nodes={nodes} className='flex-1' />
           </div>
           <div className="flex flex-row gap-4">
             <EventLog />
