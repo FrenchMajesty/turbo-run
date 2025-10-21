@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useAnimationQueueStore, QueuedAnimation } from '../stores/useAnimationQueueStore';
+import { useAnimationQueueStore, QueuedAnimation, ConsumerQueueItem } from '../stores/useAnimationQueueStore';
 import { useNodesStore } from '../stores/useNodesStore';
 import { useQueueStore } from '../stores/useQueueStore';
 import { useWorkersStore } from '../stores/useWorkersStore';
@@ -7,25 +7,28 @@ import { useRateLimitedQueue } from './useRateLimitedQueue';
 
 // Rate limits per component (animations per second)
 const RATE_LIMITS = {
-  graph: 20000,           // Fast for many nodes
-  priority_queue: 20000,  // Moderate for slide animations
-  worker_grid: 20000,     // Moderate-fast for fade animations
+  graph: 10,           // Fast for many nodes
+  priority_queue: 10,  // Moderate for slide animations
+  worker_grid: 10,     // Moderate-fast for fade animations
 };
 
 /**
  * Animation Orchestrator Hook
  *
- * This hook processes animation queues at a controlled rate:
- * 1. Monitors the animation queue store for new animations
- * 2. Feeds them into rate-limited queues (one per component)
- * 3. Processes animations sequentially at the configured rate
- * 4. Updates stores and schedules completion after animation duration
+ * New architecture:
+ * 1. Global animation map tracks all pending animations per node
+ * 2. Consumer queues (graph/queue/grid) hold references to animations
+ * 3. When processing, check if animation is first in global map for that node
+ * 4. Only process if no other animation is active for that node
+ * 5. Rate-limited processing per component
  */
 export const useAnimationOrchestrator = () => {
   const {
-    graphQueue,
-    priorityQueueQueue,
-    workerGridQueue,
+    graphConsumer,
+    queueConsumer,
+    gridConsumer,
+    getNextAnimation,
+    dequeueAnimation,
   } = useAnimationQueueStore();
 
   const { addNode, updateNode, deleteNode } = useNodesStore();
@@ -33,6 +36,7 @@ export const useAnimationOrchestrator = () => {
   const { assignWorker, releaseWorker } = useWorkersStore();
 
   const animationTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const processedConsumerItemsRef = useRef<Set<string>>(new Set());
 
   /**
    * Execute the actual store update based on the event type
@@ -105,72 +109,109 @@ export const useAnimationOrchestrator = () => {
   }, [addNode, updateNode, deleteNode, addToQueue, removeFromQueue, assignWorker, releaseWorker]);
 
   /**
-   * Process a single animation
-   * This is memoized with executeStoreUpdate as dependency
+   * Try to process a consumer item
+   * Returns true if processed, false if blocked (node has pending animation)
    */
-  const processAnimation = useCallback((animation: QueuedAnimation) => {
-    // Execute the store update to trigger visual animation
-    executeStoreUpdate(animation);
+  const tryProcessConsumerItem = useCallback((item: ConsumerQueueItem): boolean => {
+    const { nodeId, animationId } = item;
 
-    // Schedule completion timer
+    // Get the next animation for this node from global map
+    const nextAnimation = getNextAnimation(nodeId);
+
+    // Check if this consumer item matches the next animation for this node
+    if (!nextAnimation || nextAnimation.id !== animationId) {
+      // Another animation is ahead of us for this node, skip for now
+      return false;
+    }
+
+    // We can process! Execute the store update
+    executeStoreUpdate(nextAnimation);
+
+    // Schedule completion: remove from global map after animation duration
     const timer = setTimeout(() => {
-      animationTimersRef.current.delete(animation.id);
-    }, animation.duration);
+      dequeueAnimation(nodeId);
+      animationTimersRef.current.delete(nextAnimation.id);
+    }, nextAnimation.duration);
 
-    animationTimersRef.current.set(animation.id, timer);
-  }, [executeStoreUpdate]);
+    animationTimersRef.current.set(nextAnimation.id, timer);
+
+    return true;
+  }, [getNextAnimation, executeStoreUpdate, dequeueAnimation]);
+
+  /**
+   * Process consumer items with blocking logic
+   * Only processes if the animation is first for that node
+   */
+  const processConsumerItem = useCallback((item: ConsumerQueueItem) => {
+    // Skip if already processed
+    if (processedConsumerItemsRef.current.has(item.animationId)) {
+      return;
+    }
+
+    // Try to process (might be blocked by another animation for same node)
+    const processed = tryProcessConsumerItem(item);
+
+    if (processed) {
+      processedConsumerItemsRef.current.add(item.animationId);
+    } else {
+      // Blocked - retry after a short delay (reactive approach)
+      setTimeout(() => {
+        if (!processedConsumerItemsRef.current.has(item.animationId)) {
+          processConsumerItem(item);
+        }
+      }, 50); // Check again in 50ms
+    }
+  }, [tryProcessConsumerItem]);
 
   // Set up rate-limited queues for each component
-  // These are stable because processAnimation is memoized
   const graphRateLimitedQueue = useRateLimitedQueue(
     { maxPerSecond: RATE_LIMITS.graph },
-    processAnimation
+    processConsumerItem
   );
 
   const priorityQueueRateLimitedQueue = useRateLimitedQueue(
     { maxPerSecond: RATE_LIMITS.priority_queue },
-    processAnimation
+    processConsumerItem
   );
 
   const workerGridRateLimitedQueue = useRateLimitedQueue(
     { maxPerSecond: RATE_LIMITS.worker_grid },
-    processAnimation
+    processConsumerItem
   );
 
   /**
-   * Monitor animation queue store and feed new animations into rate-limited queues
-   * Use refs to track what we've already enqueued to avoid duplicates
+   * Monitor consumer queues and feed new items into rate-limited queues
    */
   const graphProcessedRef = useRef<Set<string>>(new Set());
   const pqProcessedRef = useRef<Set<string>>(new Set());
   const wgProcessedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    graphQueue.forEach((animation) => {
-      if (!graphProcessedRef.current.has(animation.id)) {
-        graphRateLimitedQueue.enqueue(animation);
-        graphProcessedRef.current.add(animation.id);
+    graphConsumer.forEach((item) => {
+      if (!graphProcessedRef.current.has(item.animationId)) {
+        graphRateLimitedQueue.enqueue(item);
+        graphProcessedRef.current.add(item.animationId);
       }
     });
-  }, [graphQueue]); // Only depend on graphQueue, not the hook object
+  }, [graphConsumer, graphRateLimitedQueue]);
 
   useEffect(() => {
-    priorityQueueQueue.forEach((animation) => {
-      if (!pqProcessedRef.current.has(animation.id)) {
-        priorityQueueRateLimitedQueue.enqueue(animation);
-        pqProcessedRef.current.add(animation.id);
+    queueConsumer.forEach((item) => {
+      if (!pqProcessedRef.current.has(item.animationId)) {
+        priorityQueueRateLimitedQueue.enqueue(item);
+        pqProcessedRef.current.add(item.animationId);
       }
     });
-  }, [priorityQueueQueue]); // Only depend on priorityQueueQueue, not the hook object
+  }, [queueConsumer, priorityQueueRateLimitedQueue]);
 
   useEffect(() => {
-    workerGridQueue.forEach((animation) => {
-      if (!wgProcessedRef.current.has(animation.id)) {
-        workerGridRateLimitedQueue.enqueue(animation);
-        wgProcessedRef.current.add(animation.id);
+    gridConsumer.forEach((item) => {
+      if (!wgProcessedRef.current.has(item.animationId)) {
+        workerGridRateLimitedQueue.enqueue(item);
+        wgProcessedRef.current.add(item.animationId);
       }
     });
-  }, [workerGridQueue]); // Only depend on workerGridQueue, not the hook object
+  }, [gridConsumer, workerGridRateLimitedQueue]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -180,6 +221,7 @@ export const useAnimationOrchestrator = () => {
       graphProcessedRef.current.clear();
       pqProcessedRef.current.clear();
       wgProcessedRef.current.clear();
+      processedConsumerItemsRef.current.clear();
     };
   }, []);
 

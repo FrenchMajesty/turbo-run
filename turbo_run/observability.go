@@ -64,7 +64,6 @@ func (tr *TurboRun) emitEvent(eventType EventType, nodeID uuid.UUID, data map[st
 
 	select {
 	case tr.eventChan <- event:
-		fmt.Printf("Event sent: %+v\n", event)
 		// Event sent successfully
 	default:
 		// Channel full, drop event to avoid blocking
