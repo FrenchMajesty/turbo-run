@@ -23,7 +23,7 @@ type PriorityQueue[T any] struct {
 func NewMaxPriorityQueue[T any]() *PriorityQueue[T] {
 	priorityQueue := &PriorityQueue[T]{
 		queue: &heapQueue[T]{
-			items: make([]*QueueItem[T], 0),
+			items: make([]QueueItem[T], 0),
 			less:  func(i, j int) bool { return i > j }, // max heap
 		},
 	}
@@ -36,7 +36,7 @@ func NewMaxPriorityQueue[T any]() *PriorityQueue[T] {
 func NewMinPriorityQueue[T any]() *PriorityQueue[T] {
 	priorityQueue := &PriorityQueue[T]{
 		queue: &heapQueue[T]{
-			items: make([]*QueueItem[T], 0),
+			items: make([]QueueItem[T], 0),
 			less:  func(i, j int) bool { return i < j }, // min heap
 		},
 	}
@@ -51,7 +51,7 @@ func NewPriorityQueue[T any]() *PriorityQueue[T] {
 }
 
 // Push adds a WorkNode to the PriorityQueue
-func (pq *PriorityQueue[T]) Push(item *QueueItem[T]) int {
+func (pq *PriorityQueue[T]) Push(item QueueItem[T]) int {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
 	heap.Push(pq.queue, item)
@@ -62,7 +62,7 @@ func (pq *PriorityQueue[T]) Push(item *QueueItem[T]) int {
 func (pq *PriorityQueue[T]) Pop() (T, int) {
 	pq.mutex.Lock()
 	defer pq.mutex.Unlock()
-	item := heap.Pop(pq.queue).(*QueueItem[T])
+	item := heap.Pop(pq.queue).(QueueItem[T])
 	return item.Item, len(pq.queue.items)
 }
 

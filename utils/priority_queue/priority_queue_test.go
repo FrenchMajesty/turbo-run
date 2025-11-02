@@ -18,7 +18,7 @@ func TestMaxPriorityQueue(t *testing.T) {
 	}
 
 	for _, item := range items {
-		queueItem := &QueueItem[string]{
+		queueItem := QueueItem[string]{
 			Item:     item.value,
 			Priority: item.priority,
 		}
@@ -62,7 +62,7 @@ func TestMinPriorityQueue(t *testing.T) {
 	}
 
 	for _, item := range items {
-		queueItem := &QueueItem[string]{
+		queueItem := QueueItem[string]{
 			Item:     item.value,
 			Priority: item.priority,
 		}
@@ -83,7 +83,7 @@ func TestNewPriorityQueue_BackwardCompatibility(t *testing.T) {
 
 	items := []int{1, 10, 5, 15}
 	for _, priority := range items {
-		queueItem := &QueueItem[int]{
+		queueItem := QueueItem[int]{
 			Item:     priority,
 			Priority: priority,
 		}
@@ -110,7 +110,7 @@ func TestPriorityQueue_EmptyQueue(t *testing.T) {
 func TestPriorityQueue_SingleItem(t *testing.T) {
 	pq := NewMaxPriorityQueue[string]()
 
-	queueItem := &QueueItem[string]{
+	queueItem := QueueItem[string]{
 		Item:     "only",
 		Priority: 42,
 	}
@@ -134,7 +134,7 @@ func TestPriorityQueue_SamePriority(t *testing.T) {
 
 	items := []string{"first", "second", "third"}
 	for _, item := range items {
-		queueItem := &QueueItem[string]{
+		queueItem := QueueItem[string]{
 			Item:     item,
 			Priority: 5,
 		}
@@ -165,7 +165,7 @@ func TestPriorityQueue_DifferentTypes(t *testing.T) {
 	}
 
 	for _, item := range items {
-		queueItem := &QueueItem[int]{
+		queueItem := QueueItem[int]{
 			Item:     item.value,
 			Priority: item.priority,
 		}

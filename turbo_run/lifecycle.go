@@ -178,7 +178,7 @@ func (tr *TurboRun) listenForGraphReadyNodes() {
 				"estimated_tokens": node.GetEstimatedTokens(),
 			})
 
-			tr.priorityQueue.Push(&priority_queue.QueueItem[*WorkNode]{
+			tr.priorityQueue.Push(priority_queue.QueueItem[*WorkNode]{
 				Item:     node,
 				Priority: node.GetEstimatedTokens(),
 			})
