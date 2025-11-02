@@ -1,0 +1,64 @@
+{
+  "nodes": [
+    {
+      "id": "success-first-try",
+      "provider": "groq",
+      "estimated_tokens": 500,
+      "duration_ms": [1500],
+      "final_status": "success",
+      "dependencies": []
+    },
+    {
+      "id": "success-after-retry",
+      "provider": "groq",
+      "estimated_tokens": 800,
+      "duration_ms": [1200, 1800],
+      "final_status": "success",
+      "dependencies": []
+    },
+    {
+      "id": "success-after-two-retries",
+      "provider": "openai",
+      "estimated_tokens": 600,
+      "duration_ms": [1000, 1500, 2000],
+      "final_status": "success",
+      "dependencies": []
+    },
+    {
+      "id": "fails-after-retries",
+      "provider": "groq",
+      "estimated_tokens": 700,
+      "duration_ms": [1300, 1600, 1900],
+      "final_status": "failed",
+      "dependencies": []
+    },
+    {
+      "id": "depends-on-success",
+      "provider": "openai",
+      "estimated_tokens": 400,
+      "duration_ms": [1100],
+      "final_status": "success",
+      "dependencies": ["success-first-try", "success-after-retry"]
+    },
+    {
+      "id": "blocked-by-failure",
+      "provider": "groq",
+      "estimated_tokens": 900,
+      "duration_ms": [1700],
+      "final_status": "success",
+      "dependencies": ["fails-after-retries"]
+    }
+  ],
+  "rate_limits": {
+    "groq": {
+      "tokens_per_window": 10000,
+      "requests_per_window": 50,
+      "window_ms": 15000
+    },
+    "openai": {
+      "tokens_per_window": 10000,
+      "requests_per_window": 50,
+      "window_ms": 15000
+    }
+  }
+}

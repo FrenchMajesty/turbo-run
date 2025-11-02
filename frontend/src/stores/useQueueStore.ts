@@ -6,6 +6,7 @@ interface QueueState {
   removeFromQueue: (nodeId: string) => void;
   setQueue: (nodeIds: string[]) => void;
   clearQueue: () => void;
+  reset: () => void;
 }
 
 export const useQueueStore = create<QueueState>((set) => ({
@@ -24,4 +25,6 @@ export const useQueueStore = create<QueueState>((set) => ({
   setQueue: (nodeIds) => set({ priorityQueueNodes: nodeIds }),
 
   clearQueue: () => set({ priorityQueueNodes: [] }),
+
+  reset: () => set({ priorityQueueNodes: [] }),
 }));

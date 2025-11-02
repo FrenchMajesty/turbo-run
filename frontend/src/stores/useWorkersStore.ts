@@ -5,6 +5,7 @@ interface WorkersState {
   assignWorker: (workerId: number, nodeId: string) => void;
   releaseWorker: (nodeId: string) => void;
   clearWorkers: () => void;
+  reset: () => void;
 }
 
 export const useWorkersStore = create<WorkersState>((set) => ({
@@ -32,4 +33,6 @@ export const useWorkersStore = create<WorkersState>((set) => ({
     }),
 
   clearWorkers: () => set({ workerStates: {} }),
+
+  reset: () => set({ workerStates: {} }),
 }));

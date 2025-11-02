@@ -8,6 +8,7 @@ interface UIState {
   setIsGraphPrepared: (isGraphPrepared: boolean) => void;
   setIsProcessing: (isProcessing: boolean) => void;
   resetUI: () => void;
+  reset: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -22,6 +23,13 @@ export const useUIStore = create<UIState>((set) => ({
   setIsProcessing: (isProcessing) => set({ isProcessing }),
 
   resetUI: () =>
+    set({
+      isPreparing: false,
+      isGraphPrepared: false,
+      isProcessing: false,
+    }),
+
+  reset: () =>
     set({
       isPreparing: false,
       isGraphPrepared: false,

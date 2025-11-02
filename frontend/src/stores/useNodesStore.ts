@@ -7,6 +7,7 @@ interface NodesState {
   updateNode: (nodeId: string, updates: Partial<NodeData>) => void;
   deleteNode: (nodeId: string) => void;
   clearNodes: () => void;
+  reset: () => void;
   getNode: (nodeId: string) => NodeData | undefined;
 }
 
@@ -44,6 +45,8 @@ export const useNodesStore = create<NodesState>((set, get) => ({
     }),
 
   clearNodes: () => set({ nodes: new Map() }),
+
+  reset: () => set({ nodes: new Map() }),
 
   getNode: (nodeId) => get().nodes.get(nodeId),
 }));

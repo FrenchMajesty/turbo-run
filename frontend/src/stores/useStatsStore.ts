@@ -16,6 +16,7 @@ interface StatsState {
   setStats: (stats: Stats) => void;
   updateStats: (updates: Partial<Stats>) => void;
   resetStats: () => void;
+  reset: () => void;
 }
 
 export const useStatsStore = create<StatsState>((set) => ({
@@ -29,4 +30,6 @@ export const useStatsStore = create<StatsState>((set) => ({
     })),
 
   resetStats: () => set({ stats: INITIAL_STATS }),
+
+  reset: () => set({ stats: INITIAL_STATS }),
 }));

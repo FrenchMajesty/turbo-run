@@ -5,6 +5,7 @@ interface EventsState {
   events: TurboEvent[];
   addEvent: (event: TurboEvent) => void;
   clearEvents: () => void;
+  reset: () => void;
 }
 
 export const useEventsStore = create<EventsState>((set) => ({
@@ -18,4 +19,6 @@ export const useEventsStore = create<EventsState>((set) => ({
     }),
 
   clearEvents: () => set({ events: [] }),
+
+  reset: () => set({ events: [] }),
 }));
