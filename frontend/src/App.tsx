@@ -39,11 +39,7 @@ function App() {
               nodes={nodes}
               totalWorkers={120}
             />
-            <PriorityQueue
-              className='w-[25vw]'
-              nodeIds={priorityQueueNodes}
-              nodes={nodes}
-            />
+            <PriorityQueue className='w-[25vw]' />
             <GraphCanvas nodes={nodes} className='flex-1' />
           </div>
           <div className="flex flex-row gap-4">

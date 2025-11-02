@@ -48,8 +48,7 @@ export class ScenarioLoader {
     // Update choreography store
     useChoreographyStore.getState().setScenario(fileName, scenario.nodes.length);
 
-    // Emit ready events for nodes with indegree 0
-    this.emitReadyNodes();
+    // Note: We don't emit ready events here. They'll be emitted when play() is called.
   }
 
   /**
@@ -110,13 +109,21 @@ export class ScenarioLoader {
 
   /**
    * Emit NODE_READY events for all nodes with indegree 0
+   * This should be called when playback starts
    */
-  private emitReadyNodes(): void {
+  startPlayback(): void {
+    const readyNodes: string[] = [];
+    const nodesStore = useNodesStore.getState();
     this.graph.forEach((graphNode, nodeId) => {
       if (graphNode.indegree === 0) {
-        this.emitter.emit(ChoreographyEventType.NODE_READY, { nodeId });
+        readyNodes.push(nodeId);
+        const node = nodesStore.getNode(nodeId);
+        if (node) {
+          this.emitter.emit(ChoreographyEventType.NODE_READY, { node });
+        }
       }
     });
+    console.log(`[ScenarioLoader] Starting playback with ${readyNodes.length} ready nodes:`, readyNodes);
   }
 
   /**

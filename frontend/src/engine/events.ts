@@ -4,6 +4,7 @@
  */
 
 import { Provider } from "../types/scenario";
+import { NodeData } from "@/types/NodeData";
 
 export enum ChoreographyEventType {
   // Node lifecycle
@@ -30,7 +31,7 @@ export enum ChoreographyEventType {
 }
 
 export interface ChoreographyEventPayloads {
-  [ChoreographyEventType.NODE_READY]: { nodeId: string };
+  [ChoreographyEventType.NODE_READY]: { node: NodeData };
   [ChoreographyEventType.NODE_ENQUEUED]: { nodeId: string };
   [ChoreographyEventType.PQ_REORDERED]: { nodeIds: string[] }; // New order
   [ChoreographyEventType.NODE_LAUNCHED]: { nodeId: string; provider: Provider };
@@ -153,6 +154,7 @@ let globalEmitter: ChoreographyEventEmitter | null = null;
  */
 export function getEventEmitter(): ChoreographyEventEmitter {
   if (!globalEmitter) {
+    console.log('Creating new event emitter');
     globalEmitter = new ChoreographyEventEmitter();
   }
   return globalEmitter;

@@ -100,19 +100,24 @@ export class Choreographer {
    * NODE_READY: Animate node into priority queue
    */
   private async onNodeReady(payload: ChoreographyEventPayloads[ChoreographyEventType.NODE_READY]): Promise<void> {
-    if (this.isPaused) return;
+    if (this.isPaused) {
+      console.log(`[Choreographer] NODE_READY skipped (paused): ${payload.node.id}`);
+      return;
+    }
 
-    const { nodeId } = payload;
+    const { node } = payload;
+    console.log(`[Choreographer] NODE_READY: ${node.id}`);
     const nodesStore = useNodesStore.getState();
     const queueStore = useQueueStore.getState();
 
     // Update node status
-    nodesStore.updateNode(nodeId, { status: "node_ready" });
+    nodesStore.updateNode(node.id, { status: "node_ready" });
 
     // Animate to priority queue
     const animation = this.animate(async () => {
-      queueStore.addToQueue(nodeId);
-      await this.emitter.emit(ChoreographyEventType.NODE_ENQUEUED, { nodeId });
+      queueStore.addToQueue(node.id);
+      console.log(`[Choreographer] Added ${node.id} to queue, emitting NODE_ENQUEUED`);
+      await this.emitter.emit(ChoreographyEventType.NODE_ENQUEUED, { nodeId: node.id });
     });
 
     this.trackAnimation(animation);
@@ -329,7 +334,10 @@ export class Choreographer {
     for (const dependentId of dependents) {
       const isReady = this.loader.decrementIndegree(dependentId);
       if (isReady) {
-        await this.emitter.emit(ChoreographyEventType.NODE_READY, { nodeId: dependentId });
+        const dependentNode = nodesStore.getNode(dependentId);
+        if (dependentNode) {
+          await this.emitter.emit(ChoreographyEventType.NODE_READY, { node: dependentNode });
+        }
       }
     }
 

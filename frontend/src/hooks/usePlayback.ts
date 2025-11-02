@@ -43,11 +43,12 @@ export function usePlayback() {
         choreographer.resume();
         await emitter.emit(ChoreographyEventType.PLAYBACK_RESUMED, {});
       } else {
-        // Start fresh
+        // Start fresh - emit ready events to kick off choreography
         await emitter.emit(ChoreographyEventType.PLAYBACK_STARTED, {});
+        loader.startPlayback();
       }
     }
-  }, [choreography, choreographer, emitter]);
+  }, [choreography, choreographer, emitter, loader]);
 
   /**
    * Pause playback
