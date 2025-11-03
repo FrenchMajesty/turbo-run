@@ -139,27 +139,22 @@ doneDrainingPushChan:
 // bootstrap starts the internal TurboRun goroutines that listen for events and dispatch them to the appropriate handlers
 func (tr *TurboRun) bootstrap() {
 	// Start core goroutines with WaitGroup tracking
-	tr.wg.Add(5)
-	go func() {
-		defer tr.wg.Done()
-		instance.listenForGraphReadyNodes()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.listenForLaunchPad()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.startMinuteTimer()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.listenForWorkerStateChanges()
-	}()
-	go func() {
-		defer tr.wg.Done()
-		instance.listenForWorkNodePushRequests()
-	}()
+
+	tr.wg.Go(func() {
+		tr.listenForGraphReadyNodes()
+	})
+	tr.wg.Go(func() {
+		tr.listenForLaunchPad()
+	})
+	tr.wg.Go(func() {
+		tr.startMinuteTimer()
+	})
+	tr.wg.Go(func() {
+		tr.listenForWorkerStateChanges()
+	})
+	tr.wg.Go(func() {
+		tr.listenForWorkNodePushRequests()
+	})
 
 	time.Sleep(5 * time.Millisecond) // give time for the goroutines to start
 	tr.logger.Printf("TurboRun %s: Engine started with %d workers (paused, awaiting Start() call)", tr.uniqueID, tr.workersPool.GetWorkerCount())

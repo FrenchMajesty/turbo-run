@@ -47,15 +47,12 @@ func (b *Builder) Run(ctx context.Context) Results {
 	var wg sync.WaitGroup
 
 	for key, task := range b.tasks {
-		wg.Add(1)
-		go func(k string, t Task) {
-			defer wg.Done()
-			value, err := t(ctx)
-			
+		wg.Go(func() {
+			value, err := task(ctx)
 			mu.Lock()
-			results[k] = Result{Value: value, Error: err}
+			results[key] = Result{Value: value, Error: err}
 			mu.Unlock()
-		}(key, task)
+		})
 	}
 
 	wg.Wait()
@@ -69,18 +66,18 @@ func Get[T any](results Results, key string, fn func(ctx context.Context) (T, er
 		var zero T
 		return zero, fmt.Errorf("no result found for key: %s", key)
 	}
-	
+
 	if result.Error != nil {
 		var zero T
 		return zero, result.Error
 	}
-	
+
 	// Type assert to the inferred type from the function signature
 	value, ok := result.Value.(T)
 	if !ok {
 		var zero T
 		return zero, fmt.Errorf("type assertion failed for key %s: expected %T, got %T", key, zero, result.Value)
 	}
-	
+
 	return value, nil
 }
